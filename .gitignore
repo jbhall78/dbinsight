@@ -1,0 +1,38 @@
+# Binaries for programs and plugins
+*.exe
+*.o
+*.a
+*.so
+*.dll
+*.DS_Store # macOS Finder metadata
+*.swp # vim swap files
+*~ # backup files
+# Test binary, build cache, and coverage
+*.test
+*.out
+.test
+*.profraw
+*.profdata
+/build/
+/coverage/
+
+# Go modules cache
+/go/pkg/mod/cache
+
+# IDE related files
+.idea/
+*.iml
+.vscode/
+
+# Docker related files
+.dockerignore
+
+# OS or Editor Folders
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+
+#Log files
+*.log
