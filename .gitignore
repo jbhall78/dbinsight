@@ -38,4 +38,4 @@ Thumbs.db
 *.log
 
 # binary
-dbinsight
+cmd/proxy/proxy

@@ -1,0 +1,8 @@
+mysql_primary_host: 127.0.0.1
+mysql_primary_port: 3306
+mysql_replica_host: 127.0.0.1
+mysql_replica_port: 3307
+mysql_user: root
+mysql_password: password
+pool_capacity: 10
+listen_address: :3306

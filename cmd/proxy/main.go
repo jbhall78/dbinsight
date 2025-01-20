@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/server"
+
+        "gopkg.in/yaml.v3" // Or your preferred YAML library
 )
 
 // Configuration
@@ -19,6 +21,18 @@ var (
 	user        = "admin"
 	password    = "Decipher-Spinach-Drank123"
 )
+
+type Config struct {
+    MySQLPrimaryHost     string `yaml:"mysql_primary_host"`
+    MySQLPrimaryPort     int    `yaml:"mysql_primary_port"`
+    MySQLReplicaHost     string `yaml:"mysql_replica_host"`
+    MySQLReplicaPort     int `   yaml:"mysql_replica_port"`
+    MySQLUser            string `yaml:"mysql_user"`
+    MySQLPassword        string `yaml:"mysql_password"`
+    PoolCapacity         int    `yaml:"pool_capacity"`
+    ListenAddress        string `yaml:"listen_address"`
+}
+
 
 // GetConnection returns a connection to the appropriate MySQL server.
 func getConnection() (*client.Conn, error) {
@@ -157,8 +171,39 @@ func handleConnection(conn net.Conn) {
 		}*/
 }
 
+func loadConfig() (*Config, error) {
+	config := Config{
+		MySQLPrimaryHost: "127.0.0.1",
+		MySQLPrimaryPort: 3306,
+		MySQLReplicaHost: "127.0.0.1",
+		MySQLReplicaPort: 3307,
+		MySQLUser:        "root",
+		MySQLPassword:    "password",
+		PoolCapacity:     10,
+		ListenAddress: ":3306",
+	}
+
+	configFile, err := os.Open("data/config/proxy.yaml")
+	if err != nil {
+                return nil, fmt.Errorf("failed to open config file: %w", err)
+        }
+        defer configFile.Close()
+
+        //var config Config
+        decoder := yaml.NewDecoder(configFile)
+        err = decoder.Decode(&config)
+        if err != nil {
+                return nil, fmt.Errorf("failed to decode config file: %w", err)
+        }
+
+        return &config, nil
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	cfg, err := loadConfig()
+	_ = cfg
 
 	listener, err := net.Listen("tcp", ":3306")
 	if err != nil {
