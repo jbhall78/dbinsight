@@ -1,0 +1,66 @@
+{
+  "builders": [
+    {
+      "type": "qemu",
+      "name": "ubuntu-qemu",
+      "iso_url": "https://releases.ubuntu.com/24.04.1/ubuntu-24.04.1-live-server-amd64.iso",
+      "iso_checksum": "sha256:e240e4b801f7bb68c20d1356b60968ad0c33a41d00d828e74ceb3364a0317be9",
+      "iso_interface": "ide",
+      "vm_name": "dbinsight-proxy-qemu",
+      "output_directory": "output-qemu",
+      "format": "qcow2",
+      "cpus": 2,
+      "memory": 2048,
+      "disk_size": 10240,
+      "accelerator": "kvm",
+      "ssh_username": "ubuntu",
+      "ssh_password": "ubuntu",
+      "headless": true
+    }
+  ],
+  "provisioners": [
+        {
+          "type": "shell",
+          "inline": [
+            "sudo apt-get update",
+            "sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release",
+            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg",
+            "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
+            "sudo apt-get update",
+            "sudo apt-get install -y docker-ce docker-ce-cli containerd.io",
+            "sudo usermod -aG docker ubuntu",
+            "newgrp docker",
+            "sudo systemctl enable docker",
+            "sudo systemctl start docker"
+          ]
+        },
+        {
+                "type": "file",
+                "source": "cmd/proxy/proxy",
+                "destination": "/tmp/proxy"
+        },
+        {
+                "type": "file",
+                "source": "data/config/proxy.yaml",
+                "destination": "/tmp/proxy.yaml"
+        },
+        {
+          "type": "shell",
+          "inline": [
+            "mkdir -p /app",
+            "chmod +x /tmp/proxy",
+            "cp /tmp/proxy /app/proxy",
+            "chmod +x /app/proxy",
+            "mkdir -p /app/data/config",
+                "cp /tmp/proxy.yaml /app/data/config/proxy.yaml",
+            "sudo useradd -m proxy",
+            "sudo chown proxy:proxy /app/proxy",
+            "sudo chown -R proxy:proxy /app/data",
+            "sudo tee /etc/systemd/system/proxy.service << EOF\n[Unit]\nDescription=Proxy Service\nAfter=network.target\n\n[Service]\nUser=proxy\nWorkingDirectory=/app\nExecStart=/app/proxy\nRestart=always\n\n[Install]\nWantedBy=multi-user.target\nEOF",
+            "sudo systemctl daemon-reload",
+            "sudo systemctl enable proxy",
+            "sudo systemctl start proxy"
+          ]
+        }
+      ]
+}
