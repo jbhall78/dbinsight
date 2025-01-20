@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/go-mysql-org/go-mysql/client"
 )
@@ -28,7 +29,7 @@ type Proxy struct {
 }
 
 func NewProxy(config *Config) (*Proxy, error) {
-	primaryPool, err := NewConnectionPool(fmt.Sprintf("%s:%d", config.MySQLPrimaryHost, config.MySQLPrimaryPort), config.MySQLUser, config.MySQLPassword, "test", config.PoolCapacity)
+	primaryPool, err := NewConnectionPool(fmt.Sprintf("%s:%d", config.MySQLPrimaryHost, config.MySQLPrimaryPort), config.MySQLUser, config.MySQLPassword, "", config.PoolCapacity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create primary pool: %w", err)
 	}
@@ -49,7 +50,7 @@ func NewProxy(config *Config) (*Proxy, error) {
 func initializeReplicaPools(config *Config) ([]*ConnectionPool, error) {
 	replicaPools := make([]*ConnectionPool, len(config.MySQLReplicas))
 	for i, replicaConfig := range config.MySQLReplicas {
-		pool, err := NewConnectionPool(fmt.Sprintf("%s:%d", replicaConfig.Host, replicaConfig.Port), config.MySQLUser, config.MySQLPassword, "test", config.PoolCapacity)
+		pool, err := NewConnectionPool(fmt.Sprintf("%s:%d", replicaConfig.Host, replicaConfig.Port), config.MySQLUser, config.MySQLPassword, "", config.PoolCapacity)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create replica pool %d: %w", i+1, err)
 		}
@@ -116,6 +117,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	for {
+		time.Sleep(1 * time.Second) // Simulate some work
 		/*data, err := packet.ReadPacket(conn)
 		if err != nil {
 			log.Printf("read packet error: %v", err)

@@ -2,13 +2,8 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net"
 	"os"
 	"runtime"
-	"strings"
-
-	"github.com/go-mysql-org/go-mysql/server"
 
 	"gopkg.in/yaml.v3" // Or your preferred YAML library
 )
@@ -26,44 +21,6 @@ type Config struct {
 	PoolCapacity     int             `yaml:"pool_capacity"`
 	ListenAddress    string          `yaml:"listen_address"`
 	MySQLReplicas    []ReplicaConfig `yaml:"mysql_replicas"` // A slice of ReplicaConfig
-}
-
-// isReadQuery checks if the query is a read-only query.
-func isReadQuery(query string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(query)), "SELECT")
-}
-
-// handleConnection handles a single client connection.
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-	fmt.Printf("New connection from: %s\n", conn.RemoteAddr())
-
-	// Create a connection with user root and an empty password.
-	// You can use your own handler to handle command here.
-	c, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading packet: %v\n", err) // Print error to stderr
-		os.Exit(1)
-	}
-
-	log.Println("Registered the connection with the server")
-
-	data, err := c.ReadPacket()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading packet: %v\n", err) // Print error to stderr
-		os.Exit(1)
-	}
-	_ = data
-
-	// as long as the client keeps sending commands, keep handling them
-	//for {
-	//	if err := c.HandleCommand(); err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	fmt.Printf("handled command")
-	//}
-	//p := packet.NewConn(c)
-	//defer p.Close()
 }
 
 func loadConfig() (*Config, error) {
@@ -111,21 +68,11 @@ func main() {
 		fmt.Printf("  Replica %d: Host=%s, Port=%d\n", i+1, replica.Host, replica.Port)
 	}
 
-	listener, err := net.Listen("tcp", ":3306")
+	p, err := NewProxy(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error listening on port 3306: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error starting proxy: %v", err)
 		os.Exit(1)
 	}
-	defer listener.Close()
 
-	fmt.Println("Listening on port 3306...")
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Printf("Error accepting connection: %v", err)
-			continue
-		}
-
-		go handleConnection(conn)
-	}
+	p.Start()
 }

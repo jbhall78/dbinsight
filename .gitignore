@@ -37,5 +37,8 @@ Thumbs.db
 #Log files
 *.log
 
+# crash dumps
+cmd/proxy/__debug_bin*
+
 # binary
 cmd/proxy/proxy
