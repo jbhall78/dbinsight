@@ -11,42 +11,51 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/client"
+	// "github.com/go-mysql-org/go-mysql/client"
 )
 
+/*
 type ConnectionPool struct {
 	pool     []*client.Conn
 	mu       sync.Mutex
 	nextConn int
 }
+*/
 
 type Proxy struct {
-	config       *Config
-	listener     net.Listener
-	primaryPool  *ConnectionPool
-	replicaPools []*ConnectionPool
-	shutdown     chan struct{}
-	wg           sync.WaitGroup
+	config   *Config
+	listener net.Listener
+	//	primaryPool  *ConnectionPool
+	//	replicaPools []*ConnectionPool
+	shutdown chan struct{}
+	wg       sync.WaitGroup
+}
+
+// Connection represents a managed database connection
+type Connection struct {
+	Conn *client.Conn
 }
 
 func NewProxy(config *Config) (*Proxy, error) {
-	primaryPool, err := NewConnectionPool(fmt.Sprintf("%s:%d", config.MySQLPrimaryHost, config.MySQLPrimaryPort), config.MySQLUser, config.MySQLPassword, "", config.PoolCapacity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create primary pool: %w", err)
-	}
+	/*	primaryPool, err := NewConnectionPool(fmt.Sprintf("%s:%d", config.MySQLPrimaryHost, config.MySQLPrimaryPort), config.MySQLUser, config.MySQLPassword, "", config.PoolCapacity)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create primary pool: %w", err)
+		}
 
-	replicaPools, err := initializeReplicaPools(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize replica pools: %w", err)
-	}
+		replicaPools, err := initializeReplicaPools(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize replica pools: %w", err)
+		}*/
 
 	return &Proxy{
-		config:       config,
-		primaryPool:  primaryPool,
-		replicaPools: replicaPools,
-		shutdown:     make(chan struct{}),
+		config: config,
+		//		primaryPool:  primaryPool,
+		//		replicaPools: replicaPools,
+		shutdown: make(chan struct{}),
 	}, nil
 }
 
+/*
 func initializeReplicaPools(config *Config) ([]*ConnectionPool, error) {
 	replicaPools := make([]*ConnectionPool, len(config.MySQLReplicas))
 	for i, replicaConfig := range config.MySQLReplicas {
@@ -58,7 +67,9 @@ func initializeReplicaPools(config *Config) ([]*ConnectionPool, error) {
 	}
 	return replicaPools, nil
 }
+*/
 
+/*
 func NewConnectionPool(addr, user, password, dbName string, poolSize int) (*ConnectionPool, error) {
 	pool := &ConnectionPool{
 		pool: make([]*client.Conn, poolSize),
@@ -72,8 +83,29 @@ func NewConnectionPool(addr, user, password, dbName string, poolSize int) (*Conn
 	}
 	return pool, nil
 }
+*/
 
 func (p *Proxy) Start() error {
+
+	/*
+			 readerPool := NewReaderPool(5, "root", "password", "127.0.0.1")
+		    writerPool := NewWriterPool(5, "root", "password", "127.0.0.1")
+		    poolManager := NewConnectionPool(5, "root", "password", "127.0.0.1", readerPool, writerPool)
+		    err := poolManager.Start()
+		    if err != nil {
+		        log.Fatal(err)
+		    }
+		    hash := HashAddress("test")
+		    conn, err := poolManager.AssignReader(hash, "test")
+		    if err != nil {
+		        log.Fatal(err)
+		    }
+		    fmt.Println("Reader: ", conn)
+		    conn, err = poolManager.UpgradeToWriter(hash)
+		    if err != nil {
+		        log.Fatal(err)
+		    }
+		    fmt.Println("Writer: ", conn)*/
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
@@ -88,7 +120,22 @@ func (p *Proxy) Start() error {
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 
-	<-sigchan
+	// Software shutdown channel
+	shutdownChan := make(chan struct{})
+
+	// Example software shutdown, replace with your actual logic
+	//go func() {
+	//	// Example: Shutdown after 10 seconds (replace with your condition)
+	//	time.Sleep(10 * time.Second)
+	//	close(shutdownChan)
+	//}()
+
+	select {
+	case <-sigchan:
+		log.Println("Received Unix signal, initiating shutdown...")
+	case <-shutdownChan:
+		log.Println("Software shutdown initiated...")
+	}
 
 	return p.Stop()
 }
@@ -135,15 +182,18 @@ func (p *Proxy) Stop() error {
 			return err
 		}
 	}
-	p.primaryPool.Close()
-	for _, replicaPool := range p.replicaPools {
-		replicaPool.Close()
-	}
+	/*
+		p.primaryPool.Close()
+		for _, replicaPool := range p.replicaPools {
+			replicaPool.Close()
+		}
+	*/
 	p.wg.Wait()
 	log.Println("Proxy stopped")
 	return nil
 }
 
+/*
 func (p *ConnectionPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -152,3 +202,4 @@ func (p *ConnectionPool) Close() {
 	}
 	p.pool = nil
 }
+*/

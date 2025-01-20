@@ -14,23 +14,25 @@ type ReplicaConfig struct {
 }
 
 type Config struct {
-	MySQLPrimaryHost string          `yaml:"mysql_primary_host"`
-	MySQLPrimaryPort int             `yaml:"mysql_primary_port"`
-	MySQLUser        string          `yaml:"mysql_user"`
-	MySQLPassword    string          `yaml:"mysql_password"`
-	PoolCapacity     int             `yaml:"pool_capacity"`
-	ListenAddress    string          `yaml:"listen_address"`
-	MySQLReplicas    []ReplicaConfig `yaml:"mysql_replicas"` // A slice of ReplicaConfig
+	MySQLPrimaryHost    string          `yaml:"mysql_primary_host"`
+	MySQLPrimaryPort    int             `yaml:"mysql_primary_port"`
+	MySQLUser           string          `yaml:"mysql_user"`
+	MySQLPassword       string          `yaml:"mysql_password"`
+	PrimaryPoolCapacity int             `yaml:"primary_pool_capacity"`
+	ReplicaPoolCapacity int             `yaml:"replica_pool_capacity"`
+	ListenAddress       string          `yaml:"listen_address"`
+	MySQLReplicas       []ReplicaConfig `yaml:"mysql_replicas"` // A slice of ReplicaConfig
 }
 
 func loadConfig() (*Config, error) {
 	config := Config{
-		MySQLPrimaryHost: "127.0.0.1",
-		MySQLPrimaryPort: 3306,
-		MySQLUser:        "root",
-		MySQLPassword:    "password",
-		PoolCapacity:     10,
-		ListenAddress:    ":3306",
+		MySQLPrimaryHost:    "127.0.0.1",
+		MySQLPrimaryPort:    3306,
+		MySQLUser:           "root",
+		MySQLPassword:       "password",
+		PrimaryPoolCapacity: 10,
+		ReplicaPoolCapacity: 10,
+		ListenAddress:       ":3306",
 	}
 
 	configFile, err := os.Open("data/config/proxy.yaml")
