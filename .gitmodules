@@ -1,0 +1,3 @@
+[submodule "go-mysql"]
+	path = go-mysql
+	url = https://github.com/jbhall78/go-mysql.git
