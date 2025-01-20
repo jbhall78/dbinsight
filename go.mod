@@ -1,4 +1,4 @@
-module dbinsight.tech/dbinsight
+module github.com/jbhall78/dbinsight
 
 go 1.23.4
 
@@ -23,3 +23,5 @@ require (
 	golang.org/x/text v0.20.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
+
+replace github.com/go-mysql-org/go-mysql => ./go-mysql
