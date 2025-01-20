@@ -86,26 +86,8 @@ func NewConnectionPool(addr, user, password, dbName string, poolSize int) (*Conn
 */
 
 func (p *Proxy) Start() error {
+	// initialize the connection pools
 
-	/*
-			 readerPool := NewReaderPool(5, "root", "password", "127.0.0.1")
-		    writerPool := NewWriterPool(5, "root", "password", "127.0.0.1")
-		    poolManager := NewConnectionPool(5, "root", "password", "127.0.0.1", readerPool, writerPool)
-		    err := poolManager.Start()
-		    if err != nil {
-		        log.Fatal(err)
-		    }
-		    hash := HashAddress("test")
-		    conn, err := poolManager.AssignReader(hash, "test")
-		    if err != nil {
-		        log.Fatal(err)
-		    }
-		    fmt.Println("Reader: ", conn)
-		    conn, err = poolManager.UpgradeToWriter(hash)
-		    if err != nil {
-		        log.Fatal(err)
-		    }
-		    fmt.Println("Writer: ", conn)*/
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)

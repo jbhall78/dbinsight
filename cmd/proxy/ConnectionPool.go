@@ -80,19 +80,17 @@ type ConnectionPool struct {
 }
 
 // NewConnectionPool creates a new ConnectionPool
-func NewConnectionPool(config *Config, readerPool *ReaderPool, writerPool *WriterPool) *ConnectionPool {
+func NewConnectionPool(config *Config) *ConnectionPool {
 	return &ConnectionPool{
 		clientPools: make(map[string]*ClientConnectionPool),
-		readerPool:  readerPool,
-		writerPool:  writerPool,
 		config:      config,
 	}
 }
 
 // Start initializes the reader and writer pools
 func (cp *ConnectionPool) Start() error {
-	_ = NewReaderPool(cp.config)
-	_ = NewWriterPool(cp.config)
+	cp.readerPool = NewReaderPool(cp.config)
+	cp.writerPool = NewWriterPool(cp.config)
 	return nil // Assuming reader and writer pools are already initialized elsewhere
 }
 
