@@ -3,20 +3,13 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 
-	//        "log"
-	"sync"
-
-	"github.com/go-mysql-org/go-mysql/client"
+	//	"fmt"
+	"log"
+	//	"sync"
 )
 
-// PooledConnection associates a connection with its hashed address
-type PooledConnection struct {
-	Conn       *client.Conn
-	HashedAddr string
-}
-
+/*
 // ClientConnectionPool maps hashed addresses to connections
 type ClientConnectionPool struct {
 	pool []*PooledConnection
@@ -64,6 +57,7 @@ func (ccp *ClientConnectionPool) CloseAll() {
 	}
 	ccp.pool = nil
 }
+*/
 
 // HashAddress generates a SHA256 hash of the IP address and port.
 func HashAddress(addr string) string {
@@ -73,7 +67,7 @@ func HashAddress(addr string) string {
 
 // ConnectionPool manages the overall connection pooling logic
 type ConnectionPool struct {
-	clientPools map[string]*ClientConnectionPool
+	connections map[string]*Connection
 	readerPool  *ReaderPool
 	writerPool  *WriterPool
 	config      *Config
@@ -82,18 +76,21 @@ type ConnectionPool struct {
 // NewConnectionPool creates a new ConnectionPool
 func NewConnectionPool(config *Config) *ConnectionPool {
 	return &ConnectionPool{
-		clientPools: make(map[string]*ClientConnectionPool),
+		connections: make(map[string]*Connection),
 		config:      config,
 	}
 }
 
 // Start initializes the reader and writer pools
 func (cp *ConnectionPool) Start() error {
+	log.Print("Creating connection pools...")
 	cp.readerPool = NewReaderPool(cp.config)
 	cp.writerPool = NewWriterPool(cp.config)
-	return nil // Assuming reader and writer pools are already initialized elsewhere
+	err := cp.writerPool.Start()
+	return err
 }
 
+/*
 // AssignReader assigns a connection from the reader pool to the client
 func (cp *ConnectionPool) AssignReader(hashedAddr string, addr string) (*client.Conn, error) {
 	conn, err := cp.readerPool.GetConnection()
@@ -105,7 +102,8 @@ func (cp *ConnectionPool) AssignReader(hashedAddr string, addr string) (*client.
 	cp.readerPool.ReleaseConnection(conn)
 	return conn.Conn, nil
 }
-
+*/
+/*
 // UpgradeToWriter upgrades the connection to a writer connection from the writer pool
 func (cp *ConnectionPool) UpgradeToWriter(hashedAddr string) (*client.Conn, error) {
 	pool := cp.clientPools[hashedAddr]
@@ -146,6 +144,7 @@ func (cp *ConnectionPool) addConnection(hashedAddr string, conn *client.Conn, ad
 func (cp *ConnectionPool) removeConnection(hashedAddr string) {
 	delete(cp.clientPools, hashedAddr)
 }
+*/
 
 /*
 func main() {

@@ -11,24 +11,14 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/client"
-	// "github.com/go-mysql-org/go-mysql/client"
 )
 
-/*
-type ConnectionPool struct {
-	pool     []*client.Conn
-	mu       sync.Mutex
-	nextConn int
-}
-*/
-
 type Proxy struct {
-	config   *Config
-	listener net.Listener
-	//	primaryPool  *ConnectionPool
-	//	replicaPools []*ConnectionPool
-	shutdown chan struct{}
-	wg       sync.WaitGroup
+	config         *Config
+	listener       net.Listener
+	connectionPool *ConnectionPool
+	shutdown       chan struct{}
+	wg             sync.WaitGroup
 }
 
 // Connection represents a managed database connection
@@ -37,20 +27,8 @@ type Connection struct {
 }
 
 func NewProxy(config *Config) (*Proxy, error) {
-	/*	primaryPool, err := NewConnectionPool(fmt.Sprintf("%s:%d", config.MySQLPrimaryHost, config.MySQLPrimaryPort), config.MySQLUser, config.MySQLPassword, "", config.PoolCapacity)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create primary pool: %w", err)
-		}
-
-		replicaPools, err := initializeReplicaPools(config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize replica pools: %w", err)
-		}*/
-
 	return &Proxy{
-		config: config,
-		//		primaryPool:  primaryPool,
-		//		replicaPools: replicaPools,
+		config:   config,
 		shutdown: make(chan struct{}),
 	}, nil
 }
@@ -69,25 +47,10 @@ func initializeReplicaPools(config *Config) ([]*ConnectionPool, error) {
 }
 */
 
-/*
-func NewConnectionPool(addr, user, password, dbName string, poolSize int) (*ConnectionPool, error) {
-	pool := &ConnectionPool{
-		pool: make([]*client.Conn, poolSize),
-	}
-	for i := 0; i < poolSize; i++ {
-		conn, err := client.Connect(addr, user, password, dbName)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to mysql: %w", err)
-		}
-		pool.pool[i] = conn
-	}
-	return pool, nil
-}
-*/
-
 func (p *Proxy) Start() error {
 	// initialize the connection pools
-	NewConnectionPool(p.config)
+	p.connectionPool = NewConnectionPool(p.config)
+	p.connectionPool.Start()
 
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
@@ -165,24 +128,8 @@ func (p *Proxy) Stop() error {
 			return err
 		}
 	}
-	/*
-		p.primaryPool.Close()
-		for _, replicaPool := range p.replicaPools {
-			replicaPool.Close()
-		}
-	*/
+
 	p.wg.Wait()
 	log.Println("Proxy stopped")
 	return nil
 }
-
-/*
-func (p *ConnectionPool) Close() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, conn := range p.pool {
-		conn.Close()
-	}
-	p.pool = nil
-}
-*/

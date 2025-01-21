@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	//        "log"
+	"log"
 	"sync"
-	//"github.com/go-mysql-org/go-mysql/client"
+
+	"github.com/go-mysql-org/go-mysql/client"
 )
 
 // WriterPool manages a pool of connections for write operations
@@ -21,6 +22,26 @@ func NewWriterPool(config *Config) *WriterPool {
 	}
 }
 
+func (wp *WriterPool) Start() error {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+
+	wp.pool = make([]*Connection, 0, wp.config.PrimaryPoolCapacity)
+
+	for i := 0; i < wp.config.PrimaryPoolCapacity; i++ {
+		conn, err := client.Connect(fmt.Sprintf("%s:%d", wp.config.MySQLPrimaryHost, wp.config.MySQLPrimaryPort), wp.config.MySQLUser, wp.config.MySQLPassword, "")
+		if err != nil {
+			return fmt.Errorf("failed to connect to MySQL: %w", err)
+		}
+		log.Printf("[%d] Connected to MySQL Primary", i)
+
+		wp.pool = append(wp.pool, &Connection{Conn: conn})
+	}
+	return nil
+
+}
+
+/*
 // GetConnection retrieves a connection from the pool.
 func (wp *WriterPool) GetConnection() (*Connection, error) {
 	wp.mu.Lock()
@@ -42,6 +63,7 @@ func (wp *WriterPool) ReleaseConnection(conn *Connection) {
 
 	wp.pool = append(wp.pool, conn)
 }
+*/
 
 /*
 // NewWriterPool creates a new WriterPool.
