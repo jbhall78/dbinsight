@@ -33,20 +33,6 @@ func NewProxy(config *Config) (*Proxy, error) {
 	}, nil
 }
 
-/*
-func initializeReplicaPools(config *Config) ([]*ConnectionPool, error) {
-	replicaPools := make([]*ConnectionPool, len(config.MySQLReplicas))
-	for i, replicaConfig := range config.MySQLReplicas {
-		pool, err := NewConnectionPool(fmt.Sprintf("%s:%d", replicaConfig.Host, replicaConfig.Port), config.MySQLUser, config.MySQLPassword, "", config.PoolCapacity)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create replica pool %d: %w", i+1, err)
-		}
-		replicaPools[i] = pool
-	}
-	return replicaPools, nil
-}
-*/
-
 func (p *Proxy) Start() error {
 	// initialize the connection pools
 	p.connectionPool = NewConnectionPool(p.config)
@@ -110,7 +96,13 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
 
+	server, err := p.connectionPool.writerPool.GetConnection()
+	if err != nil {
+		fmt.Println(fmt.Errorf("cannot assign connection to a MySQL server"))
+	}
+	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), server.Conn.RemoteAddr())
 	for {
+
 		time.Sleep(1 * time.Second) // Simulate some work
 		/*data, err := packet.ReadPacket(conn)
 		if err != nil {

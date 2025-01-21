@@ -13,6 +13,7 @@ type WriterPool struct {
 	pool   []*Connection
 	mu     sync.Mutex
 	config *Config
+	index  int // Tracks the index for round-robin assignment
 }
 
 func NewWriterPool(config *Config) *WriterPool {
@@ -41,7 +42,6 @@ func (wp *WriterPool) Start() error {
 
 }
 
-/*
 // GetConnection retrieves a connection from the pool.
 func (wp *WriterPool) GetConnection() (*Connection, error) {
 	wp.mu.Lock()
@@ -51,8 +51,11 @@ func (wp *WriterPool) GetConnection() (*Connection, error) {
 		return nil, fmt.Errorf("no writer connections available")
 	}
 
-	conn := wp.pool[0]
-	wp.pool = wp.pool[1:]
+	// Round-robin logic
+	currentIndex := wp.index % len(wp.pool)
+	conn := wp.pool[currentIndex]
+	wp.index = (wp.index + 1) % len(wp.pool)
+
 	return conn, nil
 }
 
@@ -63,7 +66,6 @@ func (wp *WriterPool) ReleaseConnection(conn *Connection) {
 
 	wp.pool = append(wp.pool, conn)
 }
-*/
 
 /*
 // NewWriterPool creates a new WriterPool.
