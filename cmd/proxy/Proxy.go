@@ -11,8 +11,8 @@ import (
 
 	//	"time"
 
-	//	"net/http"
-	//	_ "net/http/pprof"
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/server"
@@ -49,9 +49,9 @@ func NewProxy(config *Config) (*Proxy, error) {
 
 func (p *Proxy) Start() error {
 	// start debug server
-	//	go func() {
-	//		log.Println(http.ListenAndServe("localhost:6060", nil))
-	//	}()
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	// initialize the connection pools
 	p.connectionPool = NewConnectionPool(p.config)
@@ -142,14 +142,14 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
 
-	sv, err := p.connectionPool.writerPool.GetConnection()
+	cl, err := p.connectionPool.writerPool.GetConnection()
 	if err != nil {
 		fmt.Println(fmt.Errorf("cannot assign connection to a MySQL server"))
 		os.Exit(1)
 	}
-	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), sv.Conn.RemoteAddr())
+	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), cl.Conn.RemoteAddr())
 
-	err = sv.Conn.Ping()
+	err = cl.Conn.Ping()
 	if err != nil {
 		fmt.Println("ping error: ", err)
 		return
@@ -158,7 +158,8 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 
 	// Create a connection with user root and an empty password.
 	// You can use your own handler to handle command here.
-	svcon, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
+	//host, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
+	host, err := server.NewConn(conn, "root", "", NewProxyHandler())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 
 	// as long as the client keeps sending commands, keep handling them
 	for {
-		if err := svcon.HandleCommand(); err != nil {
+		if err := host.HandleCommand(); err != nil {
 			log.Fatal(err)
 		}
 	}
