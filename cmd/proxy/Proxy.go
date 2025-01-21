@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -13,10 +12,11 @@ import (
 
 	//	"time"
 
-	"net/http"
-	_ "net/http/pprof"
+	//	"net/http"
+	//	_ "net/http/pprof"
 
 	"github.com/go-mysql-org/go-mysql/client"
+	"github.com/go-mysql-org/go-mysql/server"
 )
 
 type Proxy struct {
@@ -50,9 +50,9 @@ func NewProxy(config *Config) (*Proxy, error) {
 
 func (p *Proxy) Start() error {
 	// start debug server
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	//	go func() {
+	//		log.Println(http.ListenAndServe("localhost:6060", nil))
+	//	}()
 
 	// initialize the connection pools
 	p.connectionPool = NewConnectionPool(p.config)
@@ -142,25 +142,52 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
 
-	server, err := p.connectionPool.writerPool.GetConnection()
+	sv, err := p.connectionPool.writerPool.GetConnection()
 	if err != nil {
 		fmt.Println(fmt.Errorf("cannot assign connection to a MySQL server"))
 		os.Exit(1)
 	}
-	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), server.Conn.RemoteAddr())
+	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), sv.Conn.RemoteAddr())
 
-	// Bidirectional copy
-	go func() {
-		_, err := io.Copy(server.Conn, conn)
-		if err != nil && !isClosedError(err) {
-			fmt.Printf("Error copying from client to server: %v\n", err)
-		}
-	}()
-
-	_, err = io.Copy(conn, server.Conn)
-	if err != nil && !isClosedError(err) {
-		fmt.Printf("Error copying from server to client: %v\n", err)
+	err = sv.Conn.Ping()
+	if err != nil {
+		fmt.Println("ping error: ", err)
+		return
 	}
+	fmt.Println("Ping OK")
+
+	// Create a connection with user root and an empty password.
+	// You can use your own handler to handle command here.
+	svcon, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("Registered the connection with the server")
+
+	// as long as the client keeps sending commands, keep handling them
+	for {
+		if err := svcon.HandleCommand(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	/*
+	   // Bidirectional copy
+
+	   	go func() {
+	   		_, err := io.Copy(server.Conn, conn)
+	   		if err != nil && !isClosedError(err) {
+	   			fmt.Printf("Error copying from client to server: %v\n", err)
+	   		}
+	   	}()
+
+	   _, err = io.Copy(conn, server.Conn)
+
+	   	if err != nil && !isClosedError(err) {
+	   		fmt.Printf("Error copying from server to client: %v\n", err)
+	   	}
+	*/
 }
 
 func (p *Proxy) Stop() error {
