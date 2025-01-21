@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -112,32 +111,33 @@ func (p *Proxy) acceptConnections() {
 	}
 }
 
-func isClosedError(err error) bool {
-	if err == nil {
+/*
+	func isClosedError(err error) bool {
+		if err == nil {
+			return false
+		}
+
+		if strings.Contains(err.Error(), "use of closed network connection") {
+			return true
+		}
+
+		opErr, ok := err.(*net.OpError)
+		if !ok {
+			return false
+		}
+
+		sysErr, ok := opErr.Err.(*os.SyscallError)
+		if !ok {
+			return false
+		}
+
+		if sysErr.Err == syscall.EPIPE || sysErr.Err == syscall.ECONNRESET {
+			return true
+		}
+
 		return false
 	}
-
-	if strings.Contains(err.Error(), "use of closed network connection") {
-		return true
-	}
-
-	opErr, ok := err.(*net.OpError)
-	if !ok {
-		return false
-	}
-
-	sysErr, ok := opErr.Err.(*os.SyscallError)
-	if !ok {
-		return false
-	}
-
-	if sysErr.Err == syscall.EPIPE || sysErr.Err == syscall.ECONNRESET {
-		return true
-	}
-
-	return false
-}
-
+*/
 func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()

@@ -40,6 +40,23 @@ func (rp *ReaderPool) Start() error {
 	return nil
 }
 
+func (rp *ReaderPool) Stop() error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	for _, replica := range rp.config.MySQLReplicas {
+		key := fmt.Sprintf("%s:%d", replica.Host, replica.Port)
+		for i := 0; i < len(rp.pools[key]); i++ {
+			err := rp.pools[key][i].Conn.Close()
+			if err != nil {
+				log.Println(fmt.Errorf("error closing MySQL connection[%s]: %w", rp.pools[key][i].Conn.RemoteAddr(), err))
+			}
+		}
+	}
+
+	return nil
+}
+
 /*
 func (rp *ReaderPool) GetConnection() (*Connection, error) {
 	rp.mu.Lock()

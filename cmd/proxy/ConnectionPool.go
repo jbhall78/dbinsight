@@ -46,9 +46,13 @@ func (cp *ConnectionPool) Start() error {
 }
 
 func (cp *ConnectionPool) Stop() error {
-	log.Print("Releasing connection pools...")
-	err := cp.writerPool.Stop()
-	return err
+	log.Print("Releasing reader connection pools...")
+	err := cp.readerPool.Stop()
+	if err != nil {
+		return err
+	}
+	log.Print("Releasing writer connection pools...")
+	return cp.writerPool.Stop()
 }
 
 /*
