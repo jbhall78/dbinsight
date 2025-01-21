@@ -34,7 +34,7 @@ func (wp *WriterPool) Start() error {
 		if err != nil {
 			return fmt.Errorf("failed to connect to MySQL: %w", err)
 		}
-		log.Printf("[%d] Connected to MySQL Primary", i)
+		log.Printf("%s [%d] Connected to MySQL Primary", conn.RemoteAddr().String(), i)
 
 		wp.pool = append(wp.pool, &Connection{Conn: conn, serverType: ServerTypeWriter})
 	}

@@ -2,26 +2,45 @@ package main
 
 import (
 	"fmt"
-	//        "log"
+	"log"
 	"sync"
-	// "github.com/go-mysql-org/go-mysql/client"
+
+	"github.com/go-mysql-org/go-mysql/client"
 )
 
 // Connection represents a managed database connection
 type ReaderPool struct {
-	pool   []*Connection
+	pools  map[string][]*Connection
 	mu     sync.Mutex
 	config *Config
 }
 
 func NewReaderPool(config *Config) *ReaderPool {
 	return &ReaderPool{
-		//		pool:     make([]*Connection, 0, capacity),
-		pool:   []*Connection{},
+		pools:  make(map[string][]*Connection),
 		config: config,
 	}
 }
 
+func (rp *ReaderPool) Start() error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	for _, replica := range rp.config.MySQLReplicas {
+		for i := 0; i < rp.config.ReplicaPoolCapacity; i++ {
+			conn, err := client.Connect(fmt.Sprintf("%s:%d", replica.Host, replica.Port), rp.config.MySQLUser, rp.config.MySQLPassword, "")
+			if err != nil {
+				return fmt.Errorf("failed to connect to MySQL: %w", err)
+			}
+			log.Printf("%s [%d] Connected to MySQL Replica ", conn.RemoteAddr(), i)
+
+			key := fmt.Sprintf("%s:%d", replica.Host, replica.Port)
+			rp.pools[key] = append(rp.pools[key], &Connection{Conn: conn, serverType: ServerTypeReader})
+		}
+	}
+	return nil
+}
+
+/*
 func (rp *ReaderPool) GetConnection() (*Connection, error) {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
@@ -41,6 +60,7 @@ func (rp *ReaderPool) ReleaseConnection(conn *Connection) {
 
 	rp.pool = append(rp.pool, conn)
 }
+*/
 
 /*
 import (

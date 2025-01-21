@@ -33,10 +33,15 @@ func NewConnectionPool(config *Config) *ConnectionPool {
 
 // Start initializes the reader and writer pools
 func (cp *ConnectionPool) Start() error {
-	log.Print("Creating connection pools...")
+	log.Print("Creating reader pools...")
 	cp.readerPool = NewReaderPool(cp.config)
+	err := cp.readerPool.Start()
+	if err != nil {
+		return err
+	}
+	log.Print("Creating writer pools...")
 	cp.writerPool = NewWriterPool(cp.config)
-	err := cp.writerPool.Start()
+	err = cp.writerPool.Start()
 	return err
 }
 
