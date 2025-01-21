@@ -54,7 +54,8 @@ func (p *Proxy) Start() error {
 
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
-		return fmt.Errorf("failed to listen: %w", err)
+		fmt.Println(fmt.Errorf("failed to listen to [%s]: %w", p.config.ListenAddress, err))
+		os.Exit(1)
 	}
 	p.listener = listener
 
