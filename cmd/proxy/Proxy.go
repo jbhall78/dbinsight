@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -116,6 +117,10 @@ func isClosedError(err error) bool {
 		return false
 	}
 
+	if strings.Contains(err.Error(), "use of closed network connection") {
+		return true
+	}
+
 	opErr, ok := err.(*net.OpError)
 	if !ok {
 		return false
@@ -143,13 +148,6 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		os.Exit(1)
 	}
 	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), server.Conn.RemoteAddr())
-	/*
-	   for {
-
-	   		time.Sleep(1 * time.Second) // Simulate some work
-	   		//data, err := packet.ReadPacket(conn)
-	   	}
-	*/
 
 	// Bidirectional copy
 	go func() {
@@ -157,19 +155,12 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		if err != nil && !isClosedError(err) {
 			fmt.Printf("Error copying from client to server: %v\n", err)
 		}
-		if conn != nil {
-			conn.Close()
-		}
-		if server.Conn != nil {
-			server.Conn.Close()
-		}
 	}()
 
 	_, err = io.Copy(conn, server.Conn)
 	if err != nil && !isClosedError(err) {
 		fmt.Printf("Error copying from server to client: %v\n", err)
 	}
-
 }
 
 func (p *Proxy) Stop() error {
