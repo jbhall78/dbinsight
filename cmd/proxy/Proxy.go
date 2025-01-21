@@ -87,6 +87,7 @@ func NewConnectionPool(addr, user, password, dbName string, poolSize int) (*Conn
 
 func (p *Proxy) Start() error {
 	// initialize the connection pools
+	NewConnectionPool(p.config)
 
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
