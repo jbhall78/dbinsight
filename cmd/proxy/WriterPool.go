@@ -36,7 +36,7 @@ func (wp *WriterPool) Start() error {
 		}
 		log.Printf("[%d] Connected to MySQL Primary", i)
 
-		wp.pool = append(wp.pool, &Connection{Conn: conn})
+		wp.pool = append(wp.pool, &Connection{Conn: conn, serverType: ServerTypeWriter})
 	}
 	return nil
 

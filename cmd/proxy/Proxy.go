@@ -21,9 +21,18 @@ type Proxy struct {
 	wg             sync.WaitGroup
 }
 
+type ServerType int
+
+const (
+	ServerTypeUndefined ServerType = iota
+	ServerTypeReader
+	ServerTypeWriter
+)
+
 // Connection represents a managed database connection
 type Connection struct {
-	Conn *client.Conn
+	Conn       *client.Conn
+	serverType ServerType
 }
 
 func NewProxy(config *Config) (*Proxy, error) {
