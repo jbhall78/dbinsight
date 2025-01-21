@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -110,6 +111,28 @@ func (p *Proxy) acceptConnections() {
 	}
 }
 
+func isClosedError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	opErr, ok := err.(*net.OpError)
+	if !ok {
+		return false
+	}
+
+	sysErr, ok := opErr.Err.(*os.SyscallError)
+	if !ok {
+		return false
+	}
+
+	if sysErr.Err == syscall.EPIPE || sysErr.Err == syscall.ECONNRESET {
+		return true
+	}
+
+	return false
+}
+
 func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
@@ -127,6 +150,26 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	   		//data, err := packet.ReadPacket(conn)
 	   	}
 	*/
+
+	// Bidirectional copy
+	go func() {
+		_, err := io.Copy(server.Conn, conn)
+		if err != nil && !isClosedError(err) {
+			fmt.Printf("Error copying from client to server: %v\n", err)
+		}
+		if conn != nil {
+			conn.Close()
+		}
+		if server.Conn != nil {
+			server.Conn.Close()
+		}
+	}()
+
+	_, err = io.Copy(conn, server.Conn)
+	if err != nil && !isClosedError(err) {
+		fmt.Printf("Error copying from server to client: %v\n", err)
+	}
+
 }
 
 func (p *Proxy) Stop() error {
