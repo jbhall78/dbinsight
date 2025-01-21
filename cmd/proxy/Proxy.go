@@ -8,7 +8,11 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
+
+	//	"time"
+
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/go-mysql-org/go-mysql/client"
 )
@@ -43,6 +47,11 @@ func NewProxy(config *Config) (*Proxy, error) {
 }
 
 func (p *Proxy) Start() error {
+	// start debug server
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	// initialize the connection pools
 	p.connectionPool = NewConnectionPool(p.config)
 	p.connectionPool.Start()
@@ -108,19 +117,16 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	server, err := p.connectionPool.writerPool.GetConnection()
 	if err != nil {
 		fmt.Println(fmt.Errorf("cannot assign connection to a MySQL server"))
+		os.Exit(1)
 	}
 	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), server.Conn.RemoteAddr())
-	for {
+	/*
+	   for {
 
-		time.Sleep(1 * time.Second) // Simulate some work
-		/*data, err := packet.ReadPacket(conn)
-		if err != nil {
-			log.Printf("read packet error: %v", err)
-			return
-		}
-		fmt.Printf("Received packet: %x\n", data)*/
-		// Implement proxy logic here (dispatching, etc.)
-	}
+	   		time.Sleep(1 * time.Second) // Simulate some work
+	   		//data, err := packet.ReadPacket(conn)
+	   	}
+	*/
 }
 
 func (p *Proxy) Stop() error {
@@ -130,6 +136,8 @@ func (p *Proxy) Stop() error {
 			return err
 		}
 	}
+
+	p.connectionPool.Stop()
 
 	p.wg.Wait()
 	log.Println("Proxy stopped")

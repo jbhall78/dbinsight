@@ -42,6 +42,20 @@ func (wp *WriterPool) Start() error {
 
 }
 
+func (wp *WriterPool) Stop() error {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+
+	for i := 0; i < len(wp.pool); i++ {
+		err := wp.pool[i].Conn.Close()
+		if err != nil {
+			log.Println(fmt.Errorf("error closing MySQL connection[%s]: %w", wp.pool[i].Conn.RemoteAddr(), err))
+		}
+	}
+
+	return nil
+}
+
 // GetConnection retrieves a connection from the pool.
 func (wp *WriterPool) GetConnection() (*Connection, error) {
 	wp.mu.Lock()
@@ -63,8 +77,6 @@ func (wp *WriterPool) GetConnection() (*Connection, error) {
 func (wp *WriterPool) ReleaseConnection(conn *Connection) {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
-
-	wp.pool = append(wp.pool, conn)
 }
 
 /*

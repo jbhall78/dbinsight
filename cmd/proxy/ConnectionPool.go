@@ -40,6 +40,12 @@ func (cp *ConnectionPool) Start() error {
 	return err
 }
 
+func (cp *ConnectionPool) Stop() error {
+	log.Print("Releasing connection pools...")
+	err := cp.writerPool.Stop()
+	return err
+}
+
 /*
 // AssignReader assigns a connection from the reader pool to the client
 func (cp *ConnectionPool) AssignReader(hashedAddr string, addr string) (*client.Conn, error) {
