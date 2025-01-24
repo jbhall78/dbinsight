@@ -39,6 +39,7 @@ type Connection struct {
 	Conn       *client.Conn
 	inUse      bool
 	serverType ServerType
+	dbName     string
 	mu         sync.RWMutex // Mutex for protecting the connection
 }
 
@@ -74,9 +75,6 @@ func (p *Proxy) Start() error {
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Software shutdown channel
-	shutdownChan := make(chan struct{})
-
 	// Example software shutdown, replace with your actual logic
 	//go func() {
 	//	// Example: Shutdown after 10 seconds (replace with your condition)
@@ -87,7 +85,7 @@ func (p *Proxy) Start() error {
 	select {
 	case <-sigchan:
 		log.Println("Received Unix signal, initiating shutdown...")
-	case <-shutdownChan:
+	case <-p.shutdown:
 		log.Println("Software shutdown initiated...")
 	}
 
