@@ -43,6 +43,7 @@ func NewReaderPool(config *Config) *ReaderPool {
 	return &ReaderPool{
 		readers: []*ReadServer{},
 		config:  config,
+		done:    make(chan struct{}),
 	}
 }
 
