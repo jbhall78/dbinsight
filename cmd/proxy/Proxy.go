@@ -37,6 +37,7 @@ const (
 // Connection represents a managed database connection
 type Connection struct {
 	Conn       *client.Conn
+	inUse      bool
 	serverType ServerType
 	mu         sync.RWMutex // Mutex for protecting the connection
 }
