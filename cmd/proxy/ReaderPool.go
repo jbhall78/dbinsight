@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/go-mysql-org/go-mysql/client"
 )
@@ -18,7 +19,6 @@ type ReaderPool struct {
 type ReadServer struct {
 	pool    []*Connection
 	address string
-	mu      sync.Mutex
 }
 
 func NewReadServer(address string) *ReadServer {
@@ -27,11 +27,35 @@ func NewReadServer(address string) *ReadServer {
 	}
 }
 
+func (rs *ReadServer) checkConnection(c *Connection) bool {
+	for i := 0; i < 3; i++ { // Try 3 pings
+		err := c.Conn.Ping()
+		if err == nil {
+			return true // Connection is healthy
+		}
+		time.Sleep(200 * time.Millisecond) // Wait before retrying
+	}
+	return false // Connection is considered down after 3 failed attempts
+}
+
 func NewReaderPool(config *Config) *ReaderPool {
 	return &ReaderPool{
 		readers: []*ReadServer{},
 		config:  config,
 	}
+}
+
+func (rp *ReaderPool) CheckHealth() error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	for _, rs := range rp.readers {
+		for _, c := range rs.pool {
+			if !rs.checkConnection(c) {
+				// reconnect
+			}
+		}
+	}
+	return nil
 }
 
 func (rp *ReaderPool) Connect(rs *ReadServer) error {
