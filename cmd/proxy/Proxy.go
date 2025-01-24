@@ -38,6 +38,7 @@ const (
 type Connection struct {
 	Conn       *client.Conn
 	serverType ServerType
+	mu         sync.RWMutex // Mutex for protecting the connection
 }
 
 func NewProxy(config *Config) (*Proxy, error) {

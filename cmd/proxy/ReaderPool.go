@@ -10,31 +10,62 @@ import (
 
 // Connection represents a managed database connection
 type ReaderPool struct {
-	pools  map[string][]*Connection
-	mu     sync.Mutex
-	config *Config
+	readers []*ReadServer
+	mu      sync.Mutex
+	config  *Config
+}
+
+type ReadServer struct {
+	pool    []*Connection
+	address string
+	mu      sync.Mutex
+}
+
+func NewReadServer(address string) *ReadServer {
+	return &ReadServer{
+		address: address,
+	}
 }
 
 func NewReaderPool(config *Config) *ReaderPool {
 	return &ReaderPool{
-		pools:  make(map[string][]*Connection),
-		config: config,
+		readers: []*ReadServer{},
+		config:  config,
 	}
+}
+
+func (rp *ReaderPool) Connect(rs *ReadServer) error {
+	conn, err := client.Connect(rs.address, rp.config.MySQLUser, rp.config.MySQLPassword, "")
+	if err != nil {
+		return fmt.Errorf("failed to connect to MySQL: %w", err)
+	}
+	log.Printf("%s Connected to MySQL Replica ", rs.address)
+
+	rs.pool = append(rs.pool, &Connection{Conn: conn, serverType: ServerTypeReader})
+
+	return nil
 }
 
 func (rp *ReaderPool) Start() error {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 	for _, replica := range rp.config.MySQLReplicas {
-		for i := 0; i < rp.config.ReplicaPoolCapacity; i++ {
-			conn, err := client.Connect(fmt.Sprintf("%s:%d", replica.Host, replica.Port), rp.config.MySQLUser, rp.config.MySQLPassword, "")
-			if err != nil {
-				return fmt.Errorf("failed to connect to MySQL: %w", err)
-			}
-			log.Printf("%s [%d] Connected to MySQL Replica ", conn.RemoteAddr(), i)
+		rs := NewReadServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
 
-			key := fmt.Sprintf("%s:%d", replica.Host, replica.Port)
-			rp.pools[key] = append(rp.pools[key], &Connection{Conn: conn, serverType: ServerTypeReader})
+		for i := 0; i < rp.config.ReplicaPoolCapacity; i++ {
+			rp.Connect(rs)
+		}
+	}
+	return nil
+}
+
+func (rp *ReaderPool) DeleteServer(rs *ReadServer) error {
+	for _, rs := range rp.readers {
+		for _, c := range rs.pool {
+			err := c.Conn.Close()
+			if err != nil {
+				return fmt.Errorf("error closing MySQL connection[%s]: %w", c.Conn.RemoteAddr(), err)
+			}
 		}
 	}
 	return nil
@@ -44,13 +75,10 @@ func (rp *ReaderPool) Stop() error {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 
-	for _, replica := range rp.config.MySQLReplicas {
-		key := fmt.Sprintf("%s:%d", replica.Host, replica.Port)
-		for i := 0; i < len(rp.pools[key]); i++ {
-			err := rp.pools[key][i].Conn.Close()
-			if err != nil {
-				log.Println(fmt.Errorf("error closing MySQL connection[%s]: %w", rp.pools[key][i].Conn.RemoteAddr(), err))
-			}
+	for _, rs := range rp.readers {
+		err := rp.DeleteServer(rs)
+		if err != nil {
+			fmt.Println(err)
 		}
 	}
 
