@@ -14,6 +14,7 @@ type ReaderPool struct {
 	readers []*ReadServer
 	mu      sync.Mutex
 	config  *Config
+	done    chan struct{}
 }
 
 type ReadServer struct {
@@ -80,6 +81,7 @@ func (rp *ReaderPool) Start() error {
 			rp.Connect(rs)
 		}
 	}
+	rp.done = make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -89,6 +91,8 @@ func (rp *ReaderPool) Start() error {
 				if err := rp.CheckHealth(); err != nil {
 					log.Println("Health check failed:", err)
 				}
+			case <-rp.done: // Receive shutdown signal
+				return // Exit the goroutine
 			}
 		}
 	}()
@@ -110,6 +114,8 @@ func (rp *ReaderPool) DeleteServer(rs *ReadServer) error {
 func (rp *ReaderPool) Stop() error {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
+
+	close(rp.done)
 
 	for _, rs := range rp.readers {
 		err := rp.DeleteServer(rs)
