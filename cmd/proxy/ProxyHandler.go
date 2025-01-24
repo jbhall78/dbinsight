@@ -6,16 +6,6 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 )
 
-/*
-type Result struct {
-	// ... your Result struct fields
-}
-
-type Field struct {
-	// ... your Field struct fields
-}
-*/
-
 type ProxyHandler struct {
 	// ... any internal state your handler needs
 }

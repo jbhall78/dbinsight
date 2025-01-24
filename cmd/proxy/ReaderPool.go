@@ -51,7 +51,7 @@ func (rp *ReaderPool) CheckHealth() error {
 	for _, rs := range rp.readers {
 		for _, c := range rs.pool {
 			if !rs.checkConnection(c) {
-				// reconnect
+				log.Printf("Connection to MySQL Replica %s unhealthy", rs.address)
 			}
 		}
 	}
@@ -80,6 +80,18 @@ func (rp *ReaderPool) Start() error {
 			rp.Connect(rs)
 		}
 	}
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := rp.CheckHealth(); err != nil {
+					log.Println("Health check failed:", err)
+				}
+			}
+		}
+	}()
 	return nil
 }
 
