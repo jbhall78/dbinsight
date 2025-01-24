@@ -19,11 +19,12 @@ import (
 )
 
 type Proxy struct {
-	config         *Config
-	listener       net.Listener
-	connectionPool *ConnectionPool
-	shutdown       chan struct{}
-	wg             sync.WaitGroup
+	config           *Config
+	listener         net.Listener
+	connectionPool   *ConnectionPool
+	shutdown         chan struct{}
+	shutdownAccepter chan struct{}
+	wg               sync.WaitGroup
 }
 
 type ServerType int
@@ -45,8 +46,9 @@ type Connection struct {
 
 func NewProxy(config *Config) (*Proxy, error) {
 	return &Proxy{
-		config:   config,
-		shutdown: make(chan struct{}),
+		config:           config,
+		shutdown:         make(chan struct{}),
+		shutdownAccepter: make(chan struct{}),
 	}, nil
 }
 
@@ -79,7 +81,7 @@ func (p *Proxy) Start() error {
 	//go func() {
 	//	// Example: Shutdown after 10 seconds (replace with your condition)
 	//	time.Sleep(10 * time.Second)
-	//	close(shutdownChan)
+	//	close(p.shutdown)
 	//}()
 
 	select {
@@ -98,7 +100,7 @@ func (p *Proxy) acceptConnections() {
 		conn, err := p.listener.Accept()
 		if err != nil {
 			select {
-			case <-p.shutdown:
+			case <-p.shutdownAccepter:
 				return
 			default:
 				log.Printf("accept error: %v", err)
@@ -192,7 +194,8 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 }
 
 func (p *Proxy) Stop() error {
-	close(p.shutdown)
+	close(p.shutdownAccepter)
+
 	if p.listener != nil {
 		if err := p.listener.Close(); err != nil {
 			return err
