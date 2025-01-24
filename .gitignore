@@ -42,3 +42,4 @@ cmd/proxy/__debug_bin*
 
 # binary
 cmd/proxy/proxy
+internal/web/web
