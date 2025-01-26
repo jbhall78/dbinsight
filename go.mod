@@ -3,7 +3,7 @@ module github.com/jbhall78/dbinsight
 go 1.23.4
 
 require (
-	github.com/go-mysql-org/go-mysql v1.10.1-0.20250117030507-c8c056b19164
+	github.com/go-mysql-org/go-mysql v1.11.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
