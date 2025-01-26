@@ -166,7 +166,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	//host, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
 	host, err := server.NewConn(conn, "root", "", NewProxyHandler())
 	if err != nil {
-		fmt.Printf("Access denied from: %s", conn.RemoteAddr())
+		fmt.Printf("Access denied from: %s\n", conn.RemoteAddr())
 		return
 	}
 
@@ -175,7 +175,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	// as long as the client keeps sending commands, keep handling them
 	for {
 		if err := host.HandleCommand(); err != nil {
-			fmt.Printf("Received error on connection %v", err)
+			fmt.Printf("Received error on connection: %v\n", err)
 			return
 		}
 	}
