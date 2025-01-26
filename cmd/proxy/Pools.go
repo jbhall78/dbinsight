@@ -45,17 +45,17 @@ func (pools *Backends) Initialize() error {
 
 	// readers
 	for _, replica := range pools.config.MySQLReplicas {
-		ps := NewBackendServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
-		ps.connectionsToKeep = pools.config.ReplicaPoolCapacity
-		ps.serverType = ServerTypeReader
-		pools.readerPool = append(pools.readerPool, ps)
+		svr := NewBackendServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
+		svr.connectionsToKeep = pools.config.ReplicaPoolCapacity
+		svr.serverType = ServerTypeReader
+		pools.readerPool = append(pools.readerPool, svr)
 	}
 
 	// writers
-	ws := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort))
-	ws.serverType = ServerTypeWriter
-	ws.connectionsToKeep = pools.config.PrimaryPoolCapacity
-	pools.writerPool = ws
+	wsvr := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort))
+	wsvr.serverType = ServerTypeWriter
+	wsvr.connectionsToKeep = pools.config.PrimaryPoolCapacity
+	pools.writerPool = wsvr
 
 	// start health check thread
 	go func() {
@@ -76,37 +76,37 @@ func (pools *Backends) Initialize() error {
 	return nil
 }
 
-func (pools *Backends) CheckServerHealth(ps *BackendServer) error {
+func (pools *Backends) CheckServerHealth(be *BackendServer) error {
 	// first check that we have enough connections
-	if len(ps.connections) < ps.connectionsToKeep {
-		connections := len(ps.connections)
-		for i := 0; i < ps.connectionsToKeep-connections; i++ {
-			conn, err := client.Connect(ps.address, pools.config.MySQLUser, pools.config.MySQLPassword, "")
+	if len(be.connections) < be.connectionsToKeep {
+		connections := len(be.connections)
+		for i := 0; i < be.connectionsToKeep-connections; i++ {
+			conn, err := client.Connect(be.address, pools.config.MySQLUser, pools.config.MySQLPassword, "")
 			if err != nil {
 				return fmt.Errorf("failed to connect to MySQL: %w", err)
 			}
-			ps.connections = append(ps.connections, &Connection{Conn: conn, serverType: ps.serverType})
+			be.connections = append(be.connections, &Connection{Conn: conn, serverType: be.serverType})
 			str := ""
-			if ps.serverType == ServerTypeReader {
+			if be.serverType == ServerTypeReader {
 				str = "reader"
 			} else {
 				str = "writer"
 			}
-			logWithGID(fmt.Sprintf("Connected to MySQL server: %s as a %s [%d]\n", ps.address, str, i))
+			logWithGID(fmt.Sprintf("Connected to MySQL server: %s as a %s [%d]\n", be.address, str, i))
 		}
 	}
 
 	// now check connections
-	for i, c := range ps.connections {
+	for i, c := range be.connections {
 		if c.Conn == nil {
-			conn, err := client.Connect(ps.address, pools.config.MySQLUser, pools.config.MySQLPassword, "")
+			conn, err := client.Connect(be.address, pools.config.MySQLUser, pools.config.MySQLPassword, "")
 			if err != nil {
 				return fmt.Errorf("failed to connect to MySQL: %w", err)
 			}
 			c.Conn = conn
 		}
 		if !checkConnection(c) {
-			log.Printf("Connection [%d] to MySQL server %s unhealthy", i, ps.address)
+			log.Printf("Connection [%d] to MySQL server %s unhealthy", i, be.address)
 		}
 	}
 
