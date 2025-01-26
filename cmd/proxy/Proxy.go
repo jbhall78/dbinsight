@@ -9,7 +9,7 @@ import (
 	"sync"
 	"syscall"
 
-	//	"time"
+	"time"
 
 	"net/http"
 	_ "net/http/pprof"
@@ -21,7 +21,7 @@ import (
 type Proxy struct {
 	config           *Config
 	listener         net.Listener
-	connectionPool   *ConnectionPool
+	pools            *Pools
 	shutdown         chan struct{}
 	shutdownAccepter chan struct{}
 	wg               sync.WaitGroup
@@ -39,6 +39,7 @@ const (
 type Connection struct {
 	Conn       *client.Conn
 	inUse      bool
+	lastUsed   time.Time
 	serverType ServerType
 	dbName     string
 	mu         sync.RWMutex // Mutex for protecting the connection
@@ -59,8 +60,11 @@ func (p *Proxy) Start() error {
 	}()
 
 	// initialize the connection pools
-	p.connectionPool = NewConnectionPool(p.config)
-	p.connectionPool.Start()
+	//p.connectionPool = NewConnectionPool(p.config)
+	//p.connectionPool.Start()
+
+	p.pools = NewPools(p.config)
+	p.pools.Initialize()
 
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
@@ -143,21 +147,21 @@ func (p *Proxy) acceptConnections() {
 func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
+	/*
+		cl, err := p.connectionPool.writerPool.GetConnection()
+		if err != nil {
+			fmt.Println(fmt.Errorf("cannot assign connection to a MySQL server"))
+			os.Exit(1)
+		}
+		fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), cl.Conn.RemoteAddr())
 
-	cl, err := p.connectionPool.writerPool.GetConnection()
-	if err != nil {
-		fmt.Println(fmt.Errorf("cannot assign connection to a MySQL server"))
-		os.Exit(1)
-	}
-	fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), cl.Conn.RemoteAddr())
-
-	err = cl.Conn.Ping()
-	if err != nil {
-		fmt.Println("ping error: ", err)
-		return
-	}
-	fmt.Println("Ping OK")
-
+		err = cl.Conn.Ping()
+		if err != nil {
+			fmt.Println("ping error: ", err)
+			return
+		}
+		fmt.Println("Ping OK")
+	*/
 	// Create a connection with user root and an empty password.
 	// You can use your own handler to handle command here.
 	//host, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
@@ -202,7 +206,7 @@ func (p *Proxy) Stop() error {
 		}
 	}
 
-	p.connectionPool.Stop()
+	//p.connectionPool.Stop()
 
 	p.wg.Wait()
 	log.Println("Proxy stopped")
