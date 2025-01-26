@@ -21,7 +21,7 @@ import (
 type Proxy struct {
 	config           *Config
 	listener         net.Listener
-	pools            *Pools
+	pools            *Backends
 	shutdown         chan struct{}
 	shutdownAccepter chan struct{}
 	wg               sync.WaitGroup
@@ -59,7 +59,7 @@ func (p *Proxy) Start() error {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	p.pools = NewPools(p.config)
+	p.pools = NewBackends(p.config)
 	p.pools.Initialize()
 	p.pools.CheckHealth() // call check health once on startup to immediately connect to all servers so you don't have to wait
 

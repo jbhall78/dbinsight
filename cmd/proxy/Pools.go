@@ -10,49 +10,49 @@ import (
 )
 
 // top level pools struct holds references to the readers/writers and all connections
-type Pools struct {
-	readerPool          []*PoolServer
-	writerPool          *PoolServer
+type Backends struct {
+	readerPool          []*BackendServer
+	writerPool          *BackendServer
 	config              *Config
 	mu                  sync.Mutex
 	healthCheckShutdown chan struct{}
 }
 
 // generic struct that represents either a reader or writer
-type PoolServer struct {
+type BackendServer struct {
 	connections       []*Connection
 	connectionsToKeep int
 	address           string
 	serverType        ServerType
 }
 
-func NewPools(config *Config) *Pools {
-	return &Pools{
+func NewBackends(config *Config) *Backends {
+	return &Backends{
 		config:              config,
 		healthCheckShutdown: make(chan struct{}),
 	}
 }
 
-func NewPoolServer(address string) *PoolServer {
-	return &PoolServer{
+func NewBackendServer(address string) *BackendServer {
+	return &BackendServer{
 		address: address,
 	}
 }
 
-func (pools *Pools) Initialize() error {
+func (pools *Backends) Initialize() error {
 	pools.mu.Lock()
 	defer pools.mu.Unlock()
 
 	// readers
 	for _, replica := range pools.config.MySQLReplicas {
-		ps := NewPoolServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
+		ps := NewBackendServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
 		ps.connectionsToKeep = pools.config.ReplicaPoolCapacity
 		ps.serverType = ServerTypeReader
 		pools.readerPool = append(pools.readerPool, ps)
 	}
 
 	// writers
-	ws := NewPoolServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort))
+	ws := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort))
 	ws.serverType = ServerTypeWriter
 	ws.connectionsToKeep = pools.config.PrimaryPoolCapacity
 	pools.writerPool = ws
@@ -76,7 +76,7 @@ func (pools *Pools) Initialize() error {
 	return nil
 }
 
-func (pools *Pools) CheckServerHealth(ps *PoolServer) error {
+func (pools *Backends) CheckServerHealth(ps *BackendServer) error {
 	// first check that we have enough connections
 	if len(ps.connections) < ps.connectionsToKeep {
 		connections := len(ps.connections)
@@ -113,7 +113,7 @@ func (pools *Pools) CheckServerHealth(ps *PoolServer) error {
 	return nil
 }
 
-func (pools *Pools) CheckHealth() error {
+func (pools *Backends) CheckHealth() error {
 	pools.mu.Lock()
 	defer pools.mu.Unlock()
 	//log.Println("CheckHealth called")
@@ -140,7 +140,7 @@ func checkConnection(c *Connection) bool {
 	return false // Connection is considered down after 3 failed attempts
 }
 
-func (pools *Pools) Shutdown() error {
+func (pools *Backends) Shutdown() error {
 	close(pools.healthCheckShutdown)
 	pools.mu.Lock()
 	defer pools.mu.Unlock()
