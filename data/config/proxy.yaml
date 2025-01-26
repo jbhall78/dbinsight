@@ -1,7 +1,7 @@
 mysql_primary_host: 192.168.122.100
 mysql_primary_port: 3306
 mysql_user: admin
-mysql_password: changeme
+mysql_password: Decipher-Spinach-Drank123
 primary_pool_capacity: 10
 replica_pool_capacity: 10
 listen_address: :3306
