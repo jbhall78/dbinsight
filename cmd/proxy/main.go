@@ -9,8 +9,10 @@ import (
 )
 
 type ReplicaConfig struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
 }
 
 type Config struct {
@@ -34,6 +36,7 @@ func loadConfig() (*Config, error) {
 		PrimaryPoolCapacity: 10,
 		ReplicaPoolCapacity: 10,
 		ListenAddress:       ":3306",
+		HealthCheckDelay:    5,
 	}
 
 	configFile, err := os.Open("data/config/proxy.yaml")

@@ -24,6 +24,8 @@ type BackendServer struct {
 	connectionsToKeep int
 	address           string
 	serverType        ServerType
+	user              string
+	password          string
 }
 
 func NewBackends(config *Config) *Backends {
@@ -33,9 +35,11 @@ func NewBackends(config *Config) *Backends {
 	}
 }
 
-func NewBackendServer(address string) *BackendServer {
+func NewBackendServer(address string, user string, password string) *BackendServer {
 	return &BackendServer{
-		address: address,
+		address:  address,
+		user:     user,
+		password: password,
 	}
 }
 
@@ -45,21 +49,20 @@ func (pools *Backends) Initialize() error {
 
 	// readers
 	for _, replica := range pools.config.MySQLReplicas {
-		svr := NewBackendServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
+		svr := NewBackendServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port), replica.User, replica.Password)
 		svr.connectionsToKeep = pools.config.ReplicaPoolCapacity
 		svr.serverType = ServerTypeReader
 		pools.readerPool = append(pools.readerPool, svr)
 	}
 
 	// writers
-	wsvr := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort))
+	wsvr := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort), pools.config.MySQLUser, pools.config.MySQLPassword)
 	wsvr.serverType = ServerTypeWriter
 	wsvr.connectionsToKeep = pools.config.PrimaryPoolCapacity
 	pools.writerPool = wsvr
 
 	// start health check thread
 	go func() {
-		fmt.Println("fucl:", pools.config.HealthCheckDelay)
 		ticker := time.NewTicker(time.Duration(pools.config.HealthCheckDelay) * time.Second)
 		defer ticker.Stop()
 		for {
@@ -82,7 +85,7 @@ func (pools *Backends) CheckServerHealth(be *BackendServer) error {
 	if len(be.connections) < be.connectionsToKeep {
 		connections := len(be.connections)
 		for i := 0; i < be.connectionsToKeep-connections; i++ {
-			conn, err := client.Connect(be.address, pools.config.MySQLUser, pools.config.MySQLPassword, "")
+			conn, err := client.Connect(be.address, be.user, be.password, "")
 			if err != nil {
 				return fmt.Errorf("failed to connect to MySQL: %w", err)
 			}
