@@ -1,21 +1,26 @@
-mysql_primary_host: 192.168.122.100
-mysql_primary_port: 3306
-mysql_user: admin
-mysql_password: changeme
+listen_address: :3306
+proxy_user: root
+proxy_password: changeme
+
 primary_pool_capacity: 10
 replica_pool_capacity: 10
-listen_address: :3306
 health_check_delay: 5
+
+mysql_primary_host: 192.168.122.100
+mysql_primary_port: 3306
+mysql_primary_user: admin
+mysql_primary_password: password
+
 mysql_replicas: # A list of replica configurations
   - host: 192.168.122.101
     port: 3306
     user: admin
-    password: changeme
+    password: password
   - host: 192.168.122.102
     port: 3306
     user: admin
-    password: changeme
+    password: password
   - host: 192.168.122.103
     port: 3306
     user: admin
-    password: changeme
+    password: password

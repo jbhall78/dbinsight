@@ -56,7 +56,7 @@ func (pools *Backends) Initialize() error {
 	}
 
 	// writers
-	wsvr := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort), pools.config.MySQLUser, pools.config.MySQLPassword)
+	wsvr := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.MySQLPrimaryHost, pools.config.MySQLPrimaryPort), pools.config.MySQLPrimaryUser, pools.config.MySQLPrimaryPassword)
 	wsvr.serverType = ServerTypeWriter
 	wsvr.connectionsToKeep = pools.config.PrimaryPoolCapacity
 	pools.writerPool = wsvr
@@ -103,7 +103,7 @@ func (pools *Backends) CheckServerHealth(be *BackendServer) error {
 	// now check connections
 	for i, c := range be.connections {
 		if c.Conn == nil {
-			conn, err := client.Connect(be.address, pools.config.MySQLUser, pools.config.MySQLPassword, "")
+			conn, err := client.Connect(be.address, be.user, be.password, "")
 			if err != nil {
 				return fmt.Errorf("failed to connect to MySQL: %w", err)
 			}

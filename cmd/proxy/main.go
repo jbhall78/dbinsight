@@ -16,27 +16,31 @@ type ReplicaConfig struct {
 }
 
 type Config struct {
-	MySQLPrimaryHost    string          `yaml:"mysql_primary_host"`
-	MySQLPrimaryPort    int             `yaml:"mysql_primary_port"`
-	MySQLUser           string          `yaml:"mysql_user"`
-	MySQLPassword       string          `yaml:"mysql_password"`
-	PrimaryPoolCapacity int             `yaml:"primary_pool_capacity"`
-	ReplicaPoolCapacity int             `yaml:"replica_pool_capacity"`
-	ListenAddress       string          `yaml:"listen_address"`
-	HealthCheckDelay    int             `yaml:"health_check_delay"`
-	MySQLReplicas       []ReplicaConfig `yaml:"mysql_replicas"` // A slice of ReplicaConfig
+	ProxyUser            string          `yaml:"proxy_user"`
+	ProxyPassword        string          `yaml:"proxy_password"`
+	MySQLPrimaryHost     string          `yaml:"mysql_primary_host"`
+	MySQLPrimaryPort     int             `yaml:"mysql_primary_port"`
+	MySQLPrimaryUser     string          `yaml:"mysql_user"`
+	MySQLPrimaryPassword string          `yaml:"mysql_password"`
+	PrimaryPoolCapacity  int             `yaml:"primary_pool_capacity"`
+	ReplicaPoolCapacity  int             `yaml:"replica_pool_capacity"`
+	ListenAddress        string          `yaml:"listen_address"`
+	HealthCheckDelay     int             `yaml:"health_check_delay"`
+	MySQLReplicas        []ReplicaConfig `yaml:"mysql_replicas"` // A slice of ReplicaConfig
 }
 
 func loadConfig() (*Config, error) {
 	config := Config{
-		MySQLPrimaryHost:    "127.0.0.1",
-		MySQLPrimaryPort:    3306,
-		MySQLUser:           "root",
-		MySQLPassword:       "password",
-		PrimaryPoolCapacity: 10,
-		ReplicaPoolCapacity: 10,
-		ListenAddress:       ":3306",
-		HealthCheckDelay:    5,
+		ProxyUser:            "root",
+		ProxyPassword:        "changeme",
+		MySQLPrimaryHost:     "127.0.0.1",
+		MySQLPrimaryPort:     3306,
+		MySQLPrimaryUser:     "root",
+		MySQLPrimaryPassword: "password",
+		PrimaryPoolCapacity:  10,
+		ReplicaPoolCapacity:  10,
+		ListenAddress:        ":3306",
+		HealthCheckDelay:     5,
 	}
 
 	configFile, err := os.Open("data/config/proxy.yaml")

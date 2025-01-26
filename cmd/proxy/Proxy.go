@@ -164,7 +164,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	// Create a connection with user root and an empty password.
 	// You can use your own handler to handle command here.
 	//host, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
-	host, err := server.NewConn(conn, "root", "", NewProxyHandler())
+	host, err := server.NewConn(conn, p.config.ProxyUser, p.config.ProxyPassword, NewProxyHandler())
 	if err != nil {
 		fmt.Printf("Access denied from: %s\n", conn.RemoteAddr())
 		return
