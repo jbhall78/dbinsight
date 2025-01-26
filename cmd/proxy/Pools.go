@@ -59,7 +59,8 @@ func (pools *Backends) Initialize() error {
 
 	// start health check thread
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		fmt.Println("fucl:", pools.config.HealthCheckDelay)
+		ticker := time.NewTicker(time.Duration(pools.config.HealthCheckDelay) * time.Second)
 		defer ticker.Stop()
 		for {
 			select {

@@ -21,6 +21,7 @@ type Config struct {
 	PrimaryPoolCapacity int             `yaml:"primary_pool_capacity"`
 	ReplicaPoolCapacity int             `yaml:"replica_pool_capacity"`
 	ListenAddress       string          `yaml:"listen_address"`
+	HealthCheckDelay    int             `yaml:"health_check_delay"`
 	MySQLReplicas       []ReplicaConfig `yaml:"mysql_replicas"` // A slice of ReplicaConfig
 }
 
