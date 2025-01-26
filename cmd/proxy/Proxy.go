@@ -59,10 +59,6 @@ func (p *Proxy) Start() error {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	// initialize the connection pools
-	//p.connectionPool = NewConnectionPool(p.config)
-	//p.connectionPool.Start()
-
 	p.pools = NewPools(p.config)
 	p.pools.Initialize()
 
@@ -206,7 +202,7 @@ func (p *Proxy) Stop() error {
 		}
 	}
 
-	//p.connectionPool.Stop()
+	p.pools.Shutdown()
 
 	p.wg.Wait()
 	log.Println("Proxy stopped")

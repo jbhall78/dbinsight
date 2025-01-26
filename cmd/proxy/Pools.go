@@ -45,12 +45,10 @@ func (pools *Pools) Initialize() error {
 
 	// readers
 	for _, replica := range pools.config.MySQLReplicas {
-		for i := 0; i < pools.config.ReplicaPoolCapacity; i++ {
-			ps := NewPoolServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
-			ps.connectionsToKeep = pools.config.ReplicaPoolCapacity
-			ps.serverType = ServerTypeReader
-			pools.readerPool = append(pools.readerPool, ps)
-		}
+		ps := NewPoolServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
+		ps.connectionsToKeep = pools.config.ReplicaPoolCapacity
+		ps.serverType = ServerTypeReader
+		pools.readerPool = append(pools.readerPool, ps)
 	}
 
 	// writers
@@ -81,17 +79,20 @@ func (pools *Pools) Initialize() error {
 func (pools *Pools) CheckServerHealth(ps *PoolServer) error {
 	// first check that we have enough connections
 	if len(ps.connections) < ps.connectionsToKeep {
-		for i := 0; i < ps.connectionsToKeep-len(ps.connections); i++ {
+		connections := len(ps.connections)
+		for i := 0; i < ps.connectionsToKeep-connections; i++ {
 			conn, err := client.Connect(ps.address, pools.config.MySQLUser, pools.config.MySQLPassword, "")
 			if err != nil {
 				return fmt.Errorf("failed to connect to MySQL: %w", err)
 			}
 			ps.connections = append(ps.connections, &Connection{Conn: conn, serverType: ps.serverType})
+			str := ""
 			if ps.serverType == ServerTypeReader {
-				log.Printf("Connected to MySQL server: %s as a reader\n", ps.address)
+				str = "reader"
 			} else {
-				log.Printf("Connected to MySQL server: %s as a writer\n", ps.address)
+				str = "writer"
 			}
+			logWithGID(fmt.Sprintf("Connected to MySQL server: %s as a %s [%d]\n", ps.address, str, i))
 		}
 	}
 
@@ -115,6 +116,7 @@ func (pools *Pools) CheckServerHealth(ps *PoolServer) error {
 func (pools *Pools) CheckHealth() error {
 	pools.mu.Lock()
 	defer pools.mu.Unlock()
+	log.Println("CheckHealth called")
 
 	for _, ps := range pools.readerPool {
 		err := pools.CheckServerHealth(ps)
@@ -136,4 +138,24 @@ func checkConnection(c *Connection) bool {
 		time.Sleep(200 * time.Millisecond) // Wait before retrying
 	}
 	return false // Connection is considered down after 3 failed attempts
+}
+
+func (pools *Pools) Shutdown() error {
+	close(pools.healthCheckShutdown)
+	pools.mu.Lock()
+	defer pools.mu.Unlock()
+
+	// readers
+	for _, ps := range pools.readerPool {
+		for _, c := range ps.connections {
+			c.Conn.Close()
+		}
+	}
+
+	// writers
+	for _, c := range pools.writerPool.connections {
+		c.Conn.Close()
+	}
+
+	return nil
 }
