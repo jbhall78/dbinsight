@@ -116,7 +116,7 @@ func (pools *Pools) CheckServerHealth(ps *PoolServer) error {
 func (pools *Pools) CheckHealth() error {
 	pools.mu.Lock()
 	defer pools.mu.Unlock()
-	log.Println("CheckHealth called")
+	//log.Println("CheckHealth called")
 
 	for _, ps := range pools.readerPool {
 		err := pools.CheckServerHealth(ps)

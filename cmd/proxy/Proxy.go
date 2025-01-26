@@ -61,6 +61,7 @@ func (p *Proxy) Start() error {
 
 	p.pools = NewPools(p.config)
 	p.pools.Initialize()
+	p.pools.CheckHealth() // call check health once on startup to immediately connect to all servers so you don't have to wait
 
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
@@ -143,6 +144,8 @@ func (p *Proxy) acceptConnections() {
 func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
+
+	logWithGID("handleConnection()")
 	/*
 		cl, err := p.connectionPool.writerPool.GetConnection()
 		if err != nil {
@@ -171,7 +174,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	// as long as the client keeps sending commands, keep handling them
 	for {
 		if err := host.HandleCommand(); err != nil {
-			log.Fatal(err)
+			//			log.Fatal(err)
 		}
 	}
 
