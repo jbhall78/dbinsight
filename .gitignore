@@ -37,6 +37,9 @@ Thumbs.db
 #Log files
 *.log
 
+# ISO Files
+*.iso
+
 # crash dumps
 cmd/proxy/__debug_bin*
 
