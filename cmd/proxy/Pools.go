@@ -81,13 +81,15 @@ func (pools *Backends) Initialize() error {
 }
 
 func (pools *Backends) CheckServerHealth(be *BackendServer) error {
+	//fmt.Println("called:", be.connectionsToKeep, " ", be.address, "wtf: ", len(be.connections))
 	// first check that we have enough connections
 	if len(be.connections) < be.connectionsToKeep {
 		connections := len(be.connections)
 		for i := 0; i < be.connectionsToKeep-connections; i++ {
+			//fmt.Println("Trying to connect")
 			conn, err := client.Connect(be.address, be.user, be.password, "")
 			if err != nil {
-				return fmt.Errorf("failed to connect to MySQL: %w", err)
+				fmt.Printf("failed to connect to MySQL: %s\n", err)
 			}
 			be.connections = append(be.connections, &Connection{Conn: conn, serverType: be.serverType})
 			str := ""

@@ -20,8 +20,8 @@ type Config struct {
 	ProxyPassword        string          `yaml:"proxy_password"`
 	MySQLPrimaryHost     string          `yaml:"mysql_primary_host"`
 	MySQLPrimaryPort     int             `yaml:"mysql_primary_port"`
-	MySQLPrimaryUser     string          `yaml:"mysql_user"`
-	MySQLPrimaryPassword string          `yaml:"mysql_password"`
+	MySQLPrimaryUser     string          `yaml:"mysql_primary_user"`
+	MySQLPrimaryPassword string          `yaml:"mysql_primary_password"`
 	PrimaryPoolCapacity  int             `yaml:"primary_pool_capacity"`
 	ReplicaPoolCapacity  int             `yaml:"replica_pool_capacity"`
 	ListenAddress        string          `yaml:"listen_address"`
