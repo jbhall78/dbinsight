@@ -40,6 +40,9 @@ Thumbs.db
 # ISO Files
 *.iso
 
+# QEMU Builds
+output-qemu
+
 # crash dumps
 cmd/proxy/__debug_bin*
 

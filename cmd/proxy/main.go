@@ -9,38 +9,44 @@ import (
 )
 
 type ReplicaConfig struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
+type AuthenticationMapItem struct {
+	ProxyUser       string `yaml:"proxy_user"`
+	ProxyPassword   string `yaml:"proxy_password"`
+	BackendUser     string `yaml:"backend_user"`
+	BackendPassword string `yaml:"backend_password"`
 }
 
 type Config struct {
-	ProxyUser            string          `yaml:"proxy_user"`
-	ProxyPassword        string          `yaml:"proxy_password"`
-	MySQLPrimaryHost     string          `yaml:"mysql_primary_host"`
-	MySQLPrimaryPort     int             `yaml:"mysql_primary_port"`
-	MySQLPrimaryUser     string          `yaml:"mysql_primary_user"`
-	MySQLPrimaryPassword string          `yaml:"mysql_primary_password"`
-	PrimaryPoolCapacity  int             `yaml:"primary_pool_capacity"`
-	ReplicaPoolCapacity  int             `yaml:"replica_pool_capacity"`
-	ListenAddress        string          `yaml:"listen_address"`
-	HealthCheckDelay     int             `yaml:"health_check_delay"`
-	MySQLReplicas        []ReplicaConfig `yaml:"mysql_replicas"` // A slice of ReplicaConfig
+	ProxyUser              string                  `yaml:"proxy_user"`
+	ProxyPassword          string                  `yaml:"proxy_password"`
+	BackendPrimaryHost     string                  `yaml:"backend_primary_host"`
+	BackendPrimaryPort     int                     `yaml:"backend_primary_port"`
+	BackendPrimaryUser     string                  `yaml:"backend_primary_user"`
+	BackendPrimaryPassword string                  `yaml:"backend_primary_password"`
+	PrimaryPoolCapacity    int                     `yaml:"primary_pool_capacity"`
+	ReplicaPoolCapacity    int                     `yaml:"replica_pool_capacity"`
+	ListenAddress          string                  `yaml:"listen_address"`
+	HealthCheckDelay       int                     `yaml:"health_check_delay"`
+	BackendReplicas        []ReplicaConfig         `yaml:"backend_replicas"` // A slice of ReplicaConfig
+	AuthenticationMap      []AuthenticationMapItem `yaml:"authentication_map"`
 }
 
 func loadConfig() (*Config, error) {
 	config := Config{
-		ProxyUser:            "root",
-		ProxyPassword:        "changeme",
-		MySQLPrimaryHost:     "127.0.0.1",
-		MySQLPrimaryPort:     3306,
-		MySQLPrimaryUser:     "root",
-		MySQLPrimaryPassword: "password",
-		PrimaryPoolCapacity:  10,
-		ReplicaPoolCapacity:  10,
-		ListenAddress:        ":3306",
-		HealthCheckDelay:     5,
+		ProxyUser:              "root",
+		ProxyPassword:          "changeme",
+		BackendPrimaryHost:     "127.0.0.1",
+		BackendPrimaryPort:     3306,
+		BackendPrimaryUser:     "root",
+		BackendPrimaryPassword: "password",
+		PrimaryPoolCapacity:    10,
+		ReplicaPoolCapacity:    10,
+		ListenAddress:          ":3306",
+		HealthCheckDelay:       5,
 	}
 
 	configFile, err := os.Open("data/config/proxy.yaml")
@@ -72,9 +78,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("MySQL Primary Host:", cfg.MySQLPrimaryHost)
+	fmt.Println("MySQL Primary Host:", cfg.BackendPrimaryHost)
 	fmt.Println("Replicas:")
-	for i, replica := range cfg.MySQLReplicas {
+	for i, replica := range cfg.BackendReplicas {
 		fmt.Printf("  Replica %d: Host=%s, Port=%d\n", i+1, replica.Host, replica.Port)
 	}
 

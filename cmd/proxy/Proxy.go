@@ -61,7 +61,6 @@ func (p *Proxy) Start() error {
 
 	p.pools = NewBackends(p.config)
 	p.pools.Initialize()
-	p.pools.CheckHealth() // call check health once on startup to immediately connect to all servers so you don't have to wait
 
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
