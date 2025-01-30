@@ -39,25 +39,26 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 
 func (ph *ProxyHandler) HandleFieldList(table string, fieldWildcard string) ([]*mysql.Field, error) {
 	log.Println("HandleFieldList called with table:", table, "and fieldWildcard:", fieldWildcard)
+	/*
+		// 1. Construct the SQL query to get the fields (using INFORMATION_SCHEMA)
+		//More robust way to get fields
+		sql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '%s'", table)
+		if fieldWildcard != "" {
+			sql += fmt.Sprintf(" AND COLUMN_NAME LIKE %s", fieldWildcard)
+		}
+		// 2. Execute the query on the backend server
+		result, err := ph.conn.Execute(sql)
+		if err != nil {
+			return nil, fmt.Errorf("error executing query for field list: %w", err)
+		}
+		defer result.Close()
 
-	// 1. Construct the SQL query to get the fields (using INFORMATION_SCHEMA)
-	//More robust way to get fields
-	sql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '%s'", table)
-	if fieldWildcard != "" {
-		sql += fmt.Sprintf(" AND COLUMN_NAME LIKE %s", fieldWildcard)
-	}
-	// 2. Execute the query on the backend server
-	result, err := ph.conn.Execute(sql)
-	if err != nil {
-		return nil, fmt.Errorf("error executing query for field list: %w", err)
-	}
-	defer result.Close()
+		var fields []*mysql.Field // The slice you need to return
+		// Assuming result.Fields is a []YourFieldType (replace YourFieldType)
+		fields = append(fields, result.Fields...)
 
-	var fields []*mysql.Field // The slice you need to return
-	// Assuming result.Fields is a []YourFieldType (replace YourFieldType)
-	fields = append(fields, result.Fields...)
-
-	return fields, nil
+		return fields, nil*/
+	return nil, nil
 }
 
 func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int, context interface{}, err error) {

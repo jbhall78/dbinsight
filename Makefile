@@ -9,8 +9,8 @@ $(PROJECT_NAME)-proxy:
 $(PROJECT_NAME)-create-db:
 	go build -o $(PROJECT_NAME)-create-db ./cmd/create-db
 
-#test:
-#	go test ./internal/... ./pkg/... # Run tests
+output-qemu/$(PROJECT_NAME)-proxy-qemu:
+	packer build packer/qemu/template.json
 
 docker-build:
 	docker build -t $(PROJECT_NAME)-proxy:$(VERSION) .
@@ -18,10 +18,12 @@ docker-build:
 docker-run:
 	docker run -d --restart always -p 3306:3306 $(PROJECT_NAME)-proxy:$(VERSION)
 
+#test:
+#	go test ./internal/... ./pkg/... # Run tests
+
 clean:
 	rm -f $(PROJECT_NAME)-proxy
- 
-output-qemu/$(PROJECT_NAME)-proxy-qemu:
-	packer build packer/qemu/template.json
+	rm -f $(PROJECT_NAME)-create-db
+#	rm -rf output-qemu
 
 .PHONY: clean docker-build docker-run
