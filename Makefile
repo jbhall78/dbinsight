@@ -1,8 +1,13 @@
 PROJECT_NAME = dbinsight
 VERSION = 0.1.0
 
+all: $(PROJECT_NAME)-proxy $(PROJECT_NAME)-create-db output-qemu/$(PROJECT_NAME)-proxy-qemu
+
 $(PROJECT_NAME)-proxy:
 	go build -o $(PROJECT_NAME)-proxy ./cmd/proxy
+
+$(PROJECT_NAME)-create-db:
+	go build -o $(PROJECT_NAME)-create-db ./cmd/create-db
 
 #test:
 #	go test ./internal/... ./pkg/... # Run tests
@@ -19,6 +24,4 @@ clean:
 output-qemu/$(PROJECT_NAME)-proxy-qemu:
 	packer build packer/qemu/template.json
 
-all: $(PROJECT_NAME)-proxy output-qemu/$(PROJECT_NAME)-proxy-qemu
-
-.PHONY: clean all docker-build docker-run
+.PHONY: clean docker-build docker-run

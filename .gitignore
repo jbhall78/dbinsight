@@ -50,3 +50,4 @@ cmd/proxy/__debug_bin*
 cmd/proxy/proxy
 internal/web/web
 dbinsight-proxy
+dbinsight-create-db
