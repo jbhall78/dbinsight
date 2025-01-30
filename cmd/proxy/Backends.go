@@ -129,19 +129,32 @@ func (be *Backends) Initialize() error {
 	return nil
 }
 
-func (be *Backends) GetNextConn(key UserKey) (*client.Conn, error) {
+func (be *Backends) GetNextReplica() (*BackendServer, error) {
 	be.mu.Lock()         // Acquire a read lock
 	defer be.mu.Unlock() // Release the read lock
 
-	pool, ok := be.replicas[be.rr_index].pools[key]
+	if be.rr_index >= len(be.replicas) {
+		return nil, fmt.Errorf("No replicas available")
+	}
+
+	svr := be.replicas[be.rr_index]
+
+	be.rr_index = (be.rr_index + 1) % len(be.replicas)
+
+	return svr, nil
+}
+
+func (bs *BackendServer) GetNextConn(key UserKey) (*client.Conn, error) {
+	bs.mu.Lock()         // Acquire a read lock
+	defer bs.mu.Unlock() // Release the read lock
+
+	pool, ok := bs.pools[key]
 	if !ok {
 		return nil, fmt.Errorf("no pool available")
 	}
 
 	ctx := context.Background()
 	conn, err := pool.GetConn(ctx)
-
-	be.rr_index = (be.rr_index + 1) % len(be.replicas)
 
 	return conn, err
 }

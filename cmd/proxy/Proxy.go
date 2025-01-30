@@ -140,6 +140,16 @@ func (p *Proxy) acceptConnections() {
 		return false
 	}
 */
+
+func (c *Config) getBackendPassword(user string) (string, error) {
+	for _, item := range c.AuthenticationMap {
+		if item.BackendUser == user {
+			return item.BackendPassword, nil
+		}
+	}
+	return "", fmt.Errorf("No password found for user: %s", user)
+}
+
 func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
@@ -176,6 +186,26 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	}
 
 	log.Println("Registered the connection with the server")
+
+	// obtain a connection from the pool
+
+	//conn, err := p.pools.GetNextConn(,)
+
+	svr, err := p.pools.GetNextReplica()
+	if err != nil {
+		panic(err)
+	}
+	user := host.GetUser()
+	password, err := p.config.getBackendPassword(user)
+	if err != nil {
+		panic(err)
+	}
+	key := NewUserKey(svr.address, user, password)
+
+	conn, err = svr.GetNextConn(key)
+	if err != nil {
+		panic(err)
+	}
 
 	// as long as the client keeps sending commands, keep handling them
 	for {
