@@ -25,6 +25,7 @@ type Proxy struct {
 	shutdown         chan struct{}
 	shutdownAccepter chan struct{}
 	wg               sync.WaitGroup
+	mgr              *server.InMemoryProvider
 }
 
 type ServerType int
@@ -61,9 +62,15 @@ func (p *Proxy) Start() error {
 	p.pools = NewBackends(p.config)
 	p.pools.Initialize()
 
+	// create user database, this needs to be shared
+	p.mgr = server.NewInMemoryProvider()
+	for _, item := range p.config.AuthenticationMap {
+		p.mgr.AddUser(item.ProxyUser, item.ProxyPassword)
+	}
+
 	listener, err := net.Listen("tcp", p.config.ListenAddress)
 	if err != nil {
-		fmt.Println(fmt.Errorf("failed to listen to [%s]: %w", p.config.ListenAddress, err))
+		log.Println(fmt.Errorf("failed to listen to [%s]: %w", p.config.ListenAddress, err))
 		os.Exit(1)
 	}
 	p.listener = listener
@@ -118,14 +125,17 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 
 	logWithGID("handleConnection()")
 
-	// create user database, this needs to be shared
-	mgr := server.NewInMemoryProvider()
-	for _, item := range p.config.AuthenticationMap {
-		mgr.AddUser(item.ProxyUser, item.ProxyPassword)
-	}
-
 	// create a new server connection
-	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), mgr, NewProxyHandler())
+	ph := NewProxyHandler(p)
+
+	// obtain a connection from the pool
+	svr, err := p.pools.GetNextReplica()
+	if err != nil {
+		panic(err)
+	}
+	ph.svr = svr
+
+	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), p.mgr, ph)
 	if err != nil {
 		fmt.Printf("Access denied from: %s\n", conn.RemoteAddr())
 		return
@@ -133,11 +143,6 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 
 	log.Println("Registered the connection with the server")
 
-	// obtain a connection from the pool
-	svr, err := p.pools.GetNextReplica()
-	if err != nil {
-		panic(err)
-	}
 	user := host.GetUser()
 
 	user, err = p.config.GetBackendUser(user)
@@ -150,18 +155,22 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		panic(err)
 	}
 	key := NewUserKey(svr.address, user, password)
+	ph.key = key
 
 	cl_conn, err := svr.GetNextConn(key)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Proxy received connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr())
+	log.Printf("Proxy received connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr())
+
+	ph.conn = cl_conn
+	defer ph.conn.Close()
 
 	// as long as the client keeps sending commands, keep handling them
 	for {
 		if err := host.HandleCommand(); err != nil {
-			fmt.Printf("Received error on connection: %v\n", err)
+			log.Printf("Received error on connection: %v\n", err)
 			return
 		}
 	}
