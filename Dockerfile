@@ -26,12 +26,12 @@ WORKDIR /app
 
 # Copy only the necessary files from the builder stage
 RUN ls -l /app
-COPY --from=builder /app/cmd/proxy/proxy /app/proxy
+COPY --from=builder /app/cmd/proxy/proxy /app/dbinsight-proxy
 COPY --from=builder /app/data/config/proxy.yaml /app/data/config/proxy.yaml
 RUN ls -l /app
 
 # Set the entrypoint to run the proxy
-ENTRYPOINT ["/app/proxy"]
+ENTRYPOINT ["/app/dbinsight-proxy"]
 
 # Expose the port if needed
 EXPOSE 3306

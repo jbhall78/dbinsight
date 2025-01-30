@@ -30,8 +30,8 @@
   "provisioners": [
     {
       "type": "file",
-      "source": "cmd/proxy/proxy",
-      "destination": "/tmp/proxy"
+      "source": "dbinsight-proxy",
+      "destination": "/tmp/dbinsight-proxy"
     },
     {
       "type": "file",
@@ -42,14 +42,15 @@
       "type": "shell",
       "inline": [
         "sudo mkdir -p /app",
-        "sudo chmod +x /tmp/proxy",
-        "sudo cp /tmp/proxy /app/proxy",
-        "sudo chmod +x /app/proxy",
+        "sudo chmod +x /tmp/dbinsight-proxy",
+        "sudo cp /tmp/dbinsight-proxy /app/dbinsight-proxy",
+        "sudo chmod +x /app/dbinsight-proxy",
         "sudo mkdir -p /app/data/config",
         "sudo cp /tmp/proxy.yaml /app/data/config/proxy.yaml",
-        "sudo chown proxy:proxy /app/proxy",
-        "sudo chown -R proxy:proxy /app/data",
-        "sudo tee /etc/systemd/system/proxy.service << EOF\n[Unit]\nDescription=Proxy Service\nAfter=network.target\n\n[Service]\nUser=proxy\nWorkingDirectory=/app\nExecStart=/app/proxy\nRestart=always\n\n[Install]\nWantedBy=multi-user.target\nEOF",
+	"sudo useradd -d /app -M -r -s /sbin/nologin dbinsight-proxy",
+        "sudo chown dbinsight-proxy:dbinsight-proxy /app/dbinsight-proxy",
+        "sudo chown -R dbinsight-proxy:dbinsight-proxy /app/data",
+        "sudo tee /etc/systemd/system/dbinsight-proxy.service << EOF\n[Unit]\nDescription=DBInsight Proxy Service\nAfter=network.target\n\n[Service]\nUser=dbinsight-proxy\nWorkingDirectory=/app\nExecStart=/app/dbinsight-proxy\nRestart=always\n\n[Install]\nWantedBy=multi-user.target\nEOF",
         "sudo systemctl daemon-reload",
         "sudo systemctl enable proxy",
         "sudo systemctl start proxy"
