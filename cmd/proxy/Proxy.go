@@ -113,41 +113,13 @@ func (p *Proxy) acceptConnections() {
 	}
 }
 
-/*
-	func isClosedError(err error) bool {
-		if err == nil {
-			return false
-		}
-
-		if strings.Contains(err.Error(), "use of closed network connection") {
-			return true
-		}
-
-		opErr, ok := err.(*net.OpError)
-		if !ok {
-			return false
-		}
-
-		sysErr, ok := opErr.Err.(*os.SyscallError)
-		if !ok {
-			return false
-		}
-
-		if sysErr.Err == syscall.EPIPE || sysErr.Err == syscall.ECONNRESET {
-			return true
-		}
-
-		return false
-	}
-*/
-
 func (c *Config) getBackendPassword(user string) (string, error) {
 	for _, item := range c.AuthenticationMap {
 		if item.BackendUser == user {
 			return item.BackendPassword, nil
 		}
 	}
-	return "", fmt.Errorf("No password found for user: %s", user)
+	return "", fmt.Errorf("no password found for user: %s", user)
 }
 
 func (p *Proxy) handleConnection(conn net.Conn) {
@@ -155,30 +127,14 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	logWithGID("handleConnection()")
-	/*
-		cl, err := p.connectionPool.writerPool.GetConnection()
-		if err != nil {
-			fmt.Println(fmt.Errorf("cannot assign connection to a MySQL server"))
-			os.Exit(1)
-		}
-		fmt.Printf("Proxy received connection from '%s' and is assigned to a MySQL server '%s'\n", conn.RemoteAddr().String(), cl.Conn.RemoteAddr())
 
-		err = cl.Conn.Ping()
-		if err != nil {
-			fmt.Println("ping error: ", err)
-			return
-		}
-		fmt.Println("Ping OK")
-	*/
-	// Create a connection with user root and an empty password.
-	// You can use your own handler to handle command here.
-	//host, err := server.NewConn(conn, "root", "", server.EmptyHandler{})
-	//host, err := server.NewConn(conn, p.config.ProxyUser, p.config.ProxyPassword, NewProxyHandler())
+	// create user database, this needs to be shared
 	mgr := server.NewInMemoryProvider()
 	for _, item := range p.config.AuthenticationMap {
 		mgr.AddUser(item.ProxyUser, item.ProxyPassword)
 	}
 
+	// create a new server connection
 	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), mgr, NewProxyHandler())
 	if err != nil {
 		fmt.Printf("Access denied from: %s\n", conn.RemoteAddr())
@@ -188,9 +144,6 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	log.Println("Registered the connection with the server")
 
 	// obtain a connection from the pool
-
-	//conn, err := p.pools.GetNextConn(,)
-
 	svr, err := p.pools.GetNextReplica()
 	if err != nil {
 		panic(err)
@@ -202,10 +155,12 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	}
 	key := NewUserKey(svr.address, user, password)
 
-	conn, err = svr.GetNextConn(key)
+	cl_conn, err := svr.GetNextConn(key)
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Printf("Proxy received connection for user '%s' from '%s' and is assigned to a MySQL server '%s'\n", user, conn.RemoteAddr(), cl_conn.RemoteAddr())
 
 	// as long as the client keeps sending commands, keep handling them
 	for {

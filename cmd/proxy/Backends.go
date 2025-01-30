@@ -134,7 +134,7 @@ func (be *Backends) GetNextReplica() (*BackendServer, error) {
 	defer be.mu.Unlock() // Release the read lock
 
 	if be.rr_index >= len(be.replicas) {
-		return nil, fmt.Errorf("No replicas available")
+		return nil, fmt.Errorf("no replicas available")
 	}
 
 	svr := be.replicas[be.rr_index]
