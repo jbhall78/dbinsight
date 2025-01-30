@@ -167,6 +167,11 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	ph.conn = cl_conn
 	defer ph.conn.Close()
 
+	// if a database is specified on the initial connect() we need this
+	if ph.initialDatabase != "" {
+		ph.UseDB(ph.initialDatabase)
+	}
+
 	// as long as the client keeps sending commands, keep handling them
 	for {
 		if err := host.HandleCommand(); err != nil {

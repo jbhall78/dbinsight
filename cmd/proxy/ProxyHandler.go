@@ -9,10 +9,11 @@ import (
 )
 
 type ProxyHandler struct {
-	p    *Proxy
-	conn *client.Conn
-	svr  *BackendServer
-	key  UserKey
+	p               *Proxy
+	conn            *client.Conn
+	svr             *BackendServer
+	key             UserKey
+	initialDatabase string
 }
 
 func NewProxyHandler(proxy *Proxy) *ProxyHandler {
@@ -23,7 +24,8 @@ func (ph *ProxyHandler) UseDB(dbName string) error {
 	log.Println("UseDB called with:", dbName)
 
 	if ph.conn == nil {
-		return fmt.Errorf("called with no connection")
+		ph.initialDatabase = dbName
+		return nil //fmt.Errorf("called with no connection")
 	}
 
 	// Your implementation to handle COM_INIT_DB
@@ -37,44 +39,60 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 	return ph.conn.Execute(query)
 }
 
+// COM_FIELD_LIST is deprecated so this doesn't need to be implemented
 func (ph *ProxyHandler) HandleFieldList(table string, fieldWildcard string) ([]*mysql.Field, error) {
-	log.Println("HandleFieldList called with table:", table, "and fieldWildcard:", fieldWildcard)
-	/*
-		// 1. Construct the SQL query to get the fields (using INFORMATION_SCHEMA)
-		//More robust way to get fields
-		sql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '%s'", table)
-		if fieldWildcard != "" {
-			sql += fmt.Sprintf(" AND COLUMN_NAME LIKE %s", fieldWildcard)
-		}
-		// 2. Execute the query on the backend server
-		result, err := ph.conn.Execute(sql)
-		if err != nil {
-			return nil, fmt.Errorf("error executing query for field list: %w", err)
-		}
-		defer result.Close()
 
-		var fields []*mysql.Field // The slice you need to return
-		// Assuming result.Fields is a []YourFieldType (replace YourFieldType)
-		fields = append(fields, result.Fields...)
-
-		return fields, nil*/
 	return nil, nil
 }
 
 func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int, context interface{}, err error) {
-	log.Println("HandleStmtPrepare called with:", query)
-	// Your implementation to handle COM_STMT_PREPARE
-	return 0, 0, nil, nil
+	log.Println("HandleStmtPrepare called with query:", query)
+
+	// 1. Prepare the statement on the backend server
+	stmt, err := ph.conn.Prepare(query)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
+	}
+
+	// 2. Get the number of parameters and columns
+	params = stmt.ParamNum()
+	columns = stmt.ColumnNum()
+
+	// 3. Store the prepared statement in the context
+	context = stmt // Store the *backend* prepared statement
+
+	return params, columns, context, nil
 }
 
 func (ph *ProxyHandler) HandleStmtExecute(context interface{}, query string, args []interface{}) (*mysql.Result, error) {
-	log.Println("HandleStmtExecute called with context:", context, "query:", query, "args:", args)
-	// Your implementation to handle COM_STMT_EXECUTE
-	return nil, nil
+	log.Println("HandleStmtExecute called with query:", query, "and args:", args)
+
+	// 1. Retrieve the prepared statement from the context
+	backendStmt, ok := context.(*client.Stmt) // Type assertion to *client.Stmt
+	if !ok {
+		return nil, fmt.Errorf("invalid context: expected *client.Stmt")
+	}
+
+	// 2. Execute the prepared statement on the backend server
+	result, err := backendStmt.Execute(query, args)
+	if err != nil {
+		return nil, fmt.Errorf("error executing prepared statement: %w", err)
+	}
+
+	return result, nil
 }
 
 func (ph *ProxyHandler) HandleStmtClose(context interface{}) error {
 	log.Println("HandleStmtClose called with context:", context)
+
+	// 1. Retrieve the prepared statement from the context
+	backendStmt, ok := context.(*client.Stmt) // Type assertion to *client.Stmt
+	if !ok {
+		return fmt.Errorf("invalid context: expected *client.Stmt")
+	}
+
+	backendStmt.Close()
+
 	// Your implementation to handle COM_STMT_CLOSE
 	return nil
 }
