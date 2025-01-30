@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sync"
@@ -8,20 +9,6 @@ import (
 	"github.com/go-mysql-org/go-mysql/client"
 	// "time"
 )
-
-/*
- * connection
- *   conn
- *
- * readers[]: address
- *   pool[username].init()
- *   pool[username].getConn()
- *   rridx
- *   init()
- *   getNextReader
- * writer: address
- *  init()
- */
 
 type UserKey struct {
 	Username string
@@ -35,15 +22,17 @@ type Backends struct {
 	primary  *BackendServer
 	usermap  *UserMap
 	config   *Config
-	mu       sync.Mutex
+	rr_index int // server to use for round robin load balancing
+	mu       sync.RWMutex
 	//healthCheckShutdown chan struct{}
 }
 
 // generic struct that represents either a reader or writer
 type BackendServer struct {
-	pools      map[UserKey][]*client.Pool
+	pools      map[UserKey]*client.Pool
 	address    string
 	serverType ServerType
+	mu         sync.RWMutex // Add a read/write mutex
 }
 
 func NewUserKey(host string, user string, pass string) UserKey {
@@ -64,24 +53,24 @@ func NewBackends(config *Config) *Backends {
 func NewBackendServer(address string) *BackendServer {
 	return &BackendServer{
 		address: address,
-		pools:   make(map[UserKey][]*client.Pool),
+		pools:   make(map[UserKey]*client.Pool),
 	}
 }
 
-func (pools *Backends) Initialize() error {
-	pools.mu.Lock()
-	defer pools.mu.Unlock()
+func (be *Backends) Initialize() error {
+	be.mu.Lock()
+	defer be.mu.Unlock()
 
-	pools.usermap = NewUserMap(pools.config)
-	pools.usermap.Initialize()
+	be.usermap = NewUserMap(be.config)
+	be.usermap.Initialize()
 
 	// readers
-	for _, replica := range pools.config.BackendReplicas {
+	for _, replica := range be.config.BackendReplicas {
 		svr := NewBackendServer(fmt.Sprintf("%s:%d", replica.Host, replica.Port))
 		svr.serverType = ServerTypeReader
-		pools.replicas = append(pools.replicas, svr)
+		be.replicas = append(be.replicas, svr)
 
-		for _, item := range pools.usermap.users {
+		for _, item := range be.usermap.users {
 			pool, err := client.NewPoolWithOptions(
 				svr.address,
 				item.backend_user,
@@ -95,14 +84,31 @@ func (pools *Backends) Initialize() error {
 				panic(err)
 			}
 			key := NewUserKey(svr.address, item.backend_user, item.backend_pass)
-			svr.pools[key] = append(svr.pools[key], pool)
+			//svr.pools[key] = append(svr.pools[key], pool)
+			svr.AddPool(key, pool)
 		}
 	}
 
-	// writers
-	wsvr := NewBackendServer(fmt.Sprintf("%s:%d", pools.config.BackendPrimaryHost, pools.config.BackendPrimaryPort))
+	// writer
+	wsvr := NewBackendServer(fmt.Sprintf("%s:%d", be.config.BackendPrimaryHost, be.config.BackendPrimaryPort))
 	wsvr.serverType = ServerTypeWriter
-	pools.primary = wsvr
+	be.primary = wsvr
+	for _, item := range be.usermap.users {
+		pool, err := client.NewPoolWithOptions(
+			wsvr.address,
+			item.backend_user,
+			item.backend_pass,
+			"",
+			client.WithLogFunc(log.Printf), // Or your logging function
+			client.WithPoolLimits(10, 100, 5),
+			client.WithConnOptions(), // No connection options
+		)
+		if err != nil {
+			panic(err)
+		}
+		key := NewUserKey(wsvr.address, item.backend_user, item.backend_pass)
+		wsvr.AddPool(key, pool)
+	}
 
 	// start health check thread
 	/*go func() {
@@ -121,6 +127,35 @@ func (pools *Backends) Initialize() error {
 	}()*/
 
 	return nil
+}
+
+func (be *Backends) GetNextConn(key UserKey) (*client.Conn, error) {
+	be.mu.Lock()         // Acquire a read lock
+	defer be.mu.Unlock() // Release the read lock
+
+	pool, ok := be.replicas[be.rr_index].pools[key]
+	if !ok {
+		return nil, fmt.Errorf("no pool available")
+	}
+
+	ctx := context.Background()
+	conn, err := pool.GetConn(ctx)
+
+	be.rr_index = (be.rr_index + 1) % len(be.replicas)
+
+	return conn, err
+}
+
+func (bs *BackendServer) AddPool(key UserKey, pool *client.Pool) {
+	bs.mu.Lock()
+	defer bs.mu.Unlock()
+	bs.pools[key] = pool
+}
+
+func (bs *BackendServer) DeletePool(key UserKey) {
+	bs.mu.Lock()
+	defer bs.mu.Unlock()
+	delete(bs.pools, key)
 }
 
 //func (pools *Backends) CheckServerHealth(be *BackendServer) error {
@@ -198,18 +233,18 @@ func (pools *Backends) Shutdown() error {
 	//close(pools.healthCheckShutdown)
 	pools.mu.Lock()
 	defer pools.mu.Unlock()
-	/*
-		// readers
-		for _, ps := range pools.readerPool {
-			for _, c := range ps.connections {
-				c.Conn.Close()
-			}
-		}
 
-		// writers
-		for _, c := range pools.writerPool.connections {
-			c.Conn.Close()
+	// readers
+	for _, ps := range pools.replicas {
+		for _, pool := range ps.pools {
+			pool.Close()
 		}
-	*/
+	}
+
+	// writers
+	for _, pool := range pools.primary.pools {
+		pool.Close()
+	}
+
 	return nil
 }
