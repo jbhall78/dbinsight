@@ -38,7 +38,6 @@ const (
 // Connection represents a managed database connection
 type Connection struct {
 	Conn       *client.Conn
-	inUse      bool
 	lastUsed   time.Time
 	serverType ServerType
 	dbName     string
@@ -113,15 +112,6 @@ func (p *Proxy) acceptConnections() {
 	}
 }
 
-func (c *Config) getBackendPassword(user string) (string, error) {
-	for _, item := range c.AuthenticationMap {
-		if item.BackendUser == user {
-			return item.BackendPassword, nil
-		}
-	}
-	return "", fmt.Errorf("no password found for user: %s", user)
-}
-
 func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
@@ -149,7 +139,13 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		panic(err)
 	}
 	user := host.GetUser()
-	password, err := p.config.getBackendPassword(user)
+
+	user, err = p.config.GetBackendUser(user)
+	if err != nil {
+		panic(err)
+	}
+
+	password, err := p.config.GetBackendPassword(user)
 	if err != nil {
 		panic(err)
 	}
@@ -160,7 +156,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		panic(err)
 	}
 
-	fmt.Printf("Proxy received connection for user '%s' from '%s' and is assigned to a MySQL server '%s'\n", user, conn.RemoteAddr(), cl_conn.RemoteAddr())
+	fmt.Printf("Proxy received connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr())
 
 	// as long as the client keeps sending commands, keep handling them
 	for {

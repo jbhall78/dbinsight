@@ -35,6 +35,24 @@ type Config struct {
 	AuthenticationMap      []AuthenticationMapItem `yaml:"authentication_map"`
 }
 
+func (c *Config) GetBackendUser(user string) (string, error) {
+	for _, item := range c.AuthenticationMap {
+		if item.ProxyUser == user {
+			return item.BackendUser, nil
+		}
+	}
+	return "", fmt.Errorf("no backend user found for user: %s", user)
+}
+
+func (c *Config) GetBackendPassword(user string) (string, error) {
+	for _, item := range c.AuthenticationMap {
+		if item.BackendUser == user {
+			return item.BackendPassword, nil
+		}
+	}
+	return "", fmt.Errorf("no password found for user: %s", user)
+}
+
 func loadConfig() (*Config, error) {
 	config := Config{
 		ProxyUser:              "root",
