@@ -133,7 +133,14 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	ph.svr = svr
+	ph.readServer = svr
+
+	// obtain a connection from the pool
+	svr, err = p.pools.GetWriter()
+	if err != nil {
+		panic(err)
+	}
+	ph.writeServer = svr
 
 	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), p.mgr, ph)
 	if err != nil {
@@ -154,18 +161,29 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	key := NewUserKey(svr.address, user, password)
-	ph.key = key
+	key := NewUserKey(ph.readServer.address, user, password)
+	//ph.key = key
 
-	cl_conn, err := svr.GetNextConn(key)
+	cl_conn, err := ph.readServer.GetNextConn(key)
+	if err != nil {
+		panic(err)
+	}
+
+	key = NewUserKey(ph.writeServer.address, user, password)
+	sv_conn, err := ph.writeServer.GetNextConn(key)
 	if err != nil {
 		panic(err)
 	}
 
 	log.Printf("Proxy received connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr())
 
-	ph.conn = cl_conn
-	defer ph.conn.Close()
+	ph.read_conn = cl_conn
+	//	defer ph.read_conn.Close()
+
+	ph.write_conn = sv_conn
+	//	defer ph.write_conn.Close()
+
+	ph.current_conn = ph.read_conn
 
 	// if a database is specified on the initial connect() we need this
 	if ph.initialDatabase != "" {

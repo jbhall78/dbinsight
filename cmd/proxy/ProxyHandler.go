@@ -10,26 +10,34 @@ import (
 
 type ProxyHandler struct {
 	p               *Proxy
-	conn            *client.Conn
-	svr             *BackendServer
-	key             UserKey
+	read_conn       *client.Conn
+	write_conn      *client.Conn
+	current_conn    *client.Conn
+	readServer      *BackendServer
+	writeServer     *BackendServer
+	databaseName    string
 	initialDatabase string
+	lockSession     bool
 }
 
 func NewProxyHandler(proxy *Proxy) *ProxyHandler {
+	// NOTE: most of the initialization code for this struct is
+	//       handled in handleConnection()
+
 	return &ProxyHandler{p: proxy} // Initialize any internal state here
 }
 
 func (ph *ProxyHandler) UseDB(dbName string) error {
 	log.Println("UseDB called with:", dbName)
 
-	if ph.conn == nil {
+	if ph.current_conn == nil {
 		ph.initialDatabase = dbName
+		ph.databaseName = dbName
 		return nil //fmt.Errorf("called with no connection")
 	}
 
 	// Your implementation to handle COM_INIT_DB
-	return ph.conn.UseDB(dbName)
+	return ph.current_conn.UseDB(dbName)
 }
 
 func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
@@ -38,37 +46,58 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 	stmts, err := parseSQL(query)
 	if err != nil {
 		log.Println(err)
+		return nil, err
 	}
 
-	if stmts != nil {
-		for _, stmt := range stmts {
-			switch stmt.(type) {
-			case *Select:
-				fmt.Println("Found a SELECT statement")
-				// You can access the fields of the Select struct to get more details
-				//selectStmt := stmt.(*Select)
-				//fmt.Println("From:", selectStmt.From)
-				//fmt.Println("Where:", selectStmt.Where)
+	for _, stmt := range stmts {
+		switch stmt {
+		case Set:
+			ph.lockSession = true
+			fallthrough
 
-			case *Update:
-				fmt.Println("Found an UPDATE statement")
-				//updateStmt := stmt.(*Update)
-				//fmt.Println("Where:", updateStmt.Where)
+		// read-only statements
+		case Select:
+			fallthrough
+		case Show:
+			fallthrough
+		case Use:
+			fallthrough
+		case Desc:
+			fallthrough
+		case Describe:
+			log.Println("executing read-only query: ", query)
+			return ph.current_conn.Execute(query)
 
-			case *Insert:
-				fmt.Println("Found an INSERT statement")
-				//insertStmt := stmt.(*sqlparser.Insert)
-				//fmt.Println("Table:", insertStmt.Table)
-				//fmt.Println("Columns:", insertStmt.Columns)
+		// write statements
+		case Update:
+			fallthrough
+		case Insert:
+			fallthrough
+		case Delete:
+			fallthrough
+		case Create:
+			fallthrough
+		case Alter:
+			fallthrough
+		case Drop:
+			fallthrough
+		case Truncate:
+			fallthrough
+		case Rename:
+			fallthrough
+		case Grant:
+			fallthrough
+		case Revoke:
+			log.Println("executing write query: ", query)
+			ph.current_conn = ph.write_conn
+			return ph.current_conn.Execute(query)
 
-			default:
-				fmt.Printf("Found an unknown statement type: %T\n", stmt)
-			}
+		default:
+			log.Panicf("Found an unknown statement type: %T\n", stmt)
 		}
 	}
 
-	// Your implementation to handle COM_QUERY
-	return ph.conn.Execute(query)
+	return nil, fmt.Errorf("empty statements")
 }
 
 // COM_FIELD_LIST is deprecated so this doesn't need to be implemented
@@ -81,7 +110,7 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 	log.Println("HandleStmtPrepare called with query:", query)
 
 	// 1. Prepare the statement on the backend server
-	stmt, err := ph.conn.Prepare(query)
+	stmt, err := ph.current_conn.Prepare(query)
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
 	}
