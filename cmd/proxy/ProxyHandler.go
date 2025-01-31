@@ -51,9 +51,6 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 
 	for _, stmt := range stmts {
 		switch stmt {
-		case Set:
-			ph.lockSession = true
-			fallthrough
 
 		// read-only statements
 		case Select:
@@ -88,6 +85,9 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		case Grant:
 			fallthrough
 		case Revoke:
+			fallthrough
+		case Set:
+			ph.lockSession = true
 			log.Println("executing write query: ", query)
 			ph.current_conn = ph.write_conn
 			return ph.current_conn.Execute(query)

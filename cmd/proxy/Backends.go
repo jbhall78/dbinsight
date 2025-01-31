@@ -100,7 +100,7 @@ func (be *Backends) Initialize() error {
 			item.backend_pass,
 			"",
 			client.WithLogFunc(log.Printf), // Or your logging function
-			client.WithPoolLimits(10, 100, 5),
+			client.WithPoolLimits(10, 1000, 5),
 			client.WithConnOptions(), // No connection options
 		)
 		if err != nil {
