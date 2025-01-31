@@ -51,3 +51,6 @@ cmd/proxy/proxy
 internal/web/web
 dbinsight-proxy
 dbinsight-create-db
+dbinsight-test-prepare
+cmd/create-db/create-db
+cmd/test-prepare/test-prepare

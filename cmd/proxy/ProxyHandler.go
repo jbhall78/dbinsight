@@ -74,7 +74,7 @@ func (ph *ProxyHandler) HandleStmtExecute(context interface{}, query string, arg
 	}
 
 	// 2. Execute the prepared statement on the backend server
-	result, err := backendStmt.Execute(query, args)
+	result, err := backendStmt.Execute(args...)
 	if err != nil {
 		return nil, fmt.Errorf("error executing prepared statement: %w", err)
 	}
