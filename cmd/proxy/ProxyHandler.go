@@ -17,7 +17,6 @@ type ProxyHandler struct {
 	writeServer     *BackendServer
 	databaseName    string
 	initialDatabase string
-	lockSession     bool
 }
 
 func NewProxyHandler(proxy *Proxy) *ProxyHandler {
@@ -62,7 +61,7 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		case Desc:
 			fallthrough
 		case Describe:
-			log.Println("executing read-only query: ", query)
+			logWithGID(fmt.Sprintf("executing read-only query: %s", query))
 			return ph.current_conn.Execute(query)
 
 		// write statements
@@ -87,7 +86,6 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		case Revoke:
 			fallthrough
 		case Set:
-			ph.lockSession = true
 			log.Println("executing write query: ", query)
 			ph.current_conn = ph.write_conn
 			return ph.current_conn.Execute(query)

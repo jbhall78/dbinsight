@@ -40,6 +40,9 @@ Thumbs.db
 # ISO Files
 *.iso
 
+# vim swap files
+.*.swp
+
 # QEMU Builds
 output-qemu
 
