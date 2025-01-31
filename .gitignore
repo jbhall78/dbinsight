@@ -43,6 +43,8 @@ Thumbs.db
 # vim swap files
 .*.sw?
 
+*.orig
+
 # QEMU Builds
 output-qemu
 
