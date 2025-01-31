@@ -54,8 +54,12 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		switch stmt {
 
 		case Use:
-			ph.current_conn.Execute(query)
-			return nil, nil
+			res, err := ph.current_conn.Execute(query)
+			if err != nil {
+				return nil, err
+			}
+			res.Resultset = nil // force an OK packet to be sent by go-mysql
+			return res, nil
 
 		// read-only statements
 		case Select:
@@ -69,6 +73,16 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			logWithGID(fmt.Sprintf("executing read-only query: %s", query))
 			return ph.current_conn.Execute(query)
 
+		case Create:
+			fallthrough
+		case Alter:
+			fallthrough
+		case Drop:
+			fallthrough
+		case Delete:
+			fallthrough
+		case Update:
+			fallthrough
 		case Insert:
 			if !ph.connectionLocked {
 				log.Println("locking connection to write server")
@@ -82,22 +96,11 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			if err != nil {
 				return nil, err
 			}
-			log.Println("got result: ", res)
-			res.Resultset = nil
+			res.Resultset = nil // force an OK packet to be sent by go-mysql
 			return res, nil
 
 		// write statements
-		case Update:
-			fallthrough
 
-		case Delete:
-			fallthrough
-		case Create:
-			fallthrough
-		case Alter:
-			fallthrough
-		case Drop:
-			fallthrough
 		case Truncate:
 			fallthrough
 		case Rename:
@@ -119,7 +122,6 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			if err != nil {
 				return nil, err
 			}
-			log.Println("got result: ", res)
 
 			return res, nil
 
