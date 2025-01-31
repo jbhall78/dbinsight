@@ -35,6 +35,38 @@ func (ph *ProxyHandler) UseDB(dbName string) error {
 func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 	log.Println("HandleQuery called with:", query)
 
+	stmts, err := parseSQL(query)
+	if err != nil {
+		log.Println(err)
+	}
+
+	if stmts != nil {
+		for _, stmt := range stmts {
+			switch stmt.(type) {
+			case *Select:
+				fmt.Println("Found a SELECT statement")
+				// You can access the fields of the Select struct to get more details
+				//selectStmt := stmt.(*Select)
+				//fmt.Println("From:", selectStmt.From)
+				//fmt.Println("Where:", selectStmt.Where)
+
+			case *Update:
+				fmt.Println("Found an UPDATE statement")
+				//updateStmt := stmt.(*Update)
+				//fmt.Println("Where:", updateStmt.Where)
+
+			case *Insert:
+				fmt.Println("Found an INSERT statement")
+				//insertStmt := stmt.(*sqlparser.Insert)
+				//fmt.Println("Table:", insertStmt.Table)
+				//fmt.Println("Columns:", insertStmt.Columns)
+
+			default:
+				fmt.Printf("Found an unknown statement type: %T\n", stmt)
+			}
+		}
+	}
+
 	// Your implementation to handle COM_QUERY
 	return ph.conn.Execute(query)
 }
