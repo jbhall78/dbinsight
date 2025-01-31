@@ -78,7 +78,13 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			}
 			ph.current_conn.UseDB(ph.databaseName)
 			log.Println("executing write query: ", query)
-			return ph.current_conn.Execute(query)
+			res, err := ph.current_conn.Execute(query)
+			if err != nil {
+				return nil, err
+			}
+			log.Println("got result: ", res)
+			res.Resultset = nil
+			return res, nil
 
 		// write statements
 		case Update:
@@ -103,7 +109,7 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		case Set:
 			if !ph.connectionLocked {
 				log.Println("locking connection to write server")
-				//ph.write_conn.Sequence = ph.read_conn.Sequence
+				ph.write_conn.Sequence = ph.read_conn.Sequence
 				ph.current_conn = ph.write_conn
 
 			}
@@ -115,7 +121,7 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			}
 			log.Println("got result: ", res)
 
-			return nil, nil
+			return res, nil
 
 		default:
 			log.Panicf("Found an unknown statement type: %T\n", stmt)
