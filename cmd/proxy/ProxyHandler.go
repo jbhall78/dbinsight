@@ -9,14 +9,15 @@ import (
 )
 
 type ProxyHandler struct {
-	p               *Proxy
-	read_conn       *client.Conn
-	write_conn      *client.Conn
-	current_conn    *client.Conn
-	readServer      *BackendServer
-	writeServer     *BackendServer
-	databaseName    string
-	initialDatabase string
+	p                *Proxy
+	read_conn        *client.Conn
+	write_conn       *client.Conn
+	current_conn     *client.Conn
+	readServer       *BackendServer
+	writeServer      *BackendServer
+	databaseName     string
+	initialDatabase  string
+	connectionLocked bool
 }
 
 func NewProxyHandler(proxy *Proxy) *ProxyHandler {
@@ -34,6 +35,7 @@ func (ph *ProxyHandler) UseDB(dbName string) error {
 		ph.databaseName = dbName
 		return nil //fmt.Errorf("called with no connection")
 	}
+	ph.databaseName = dbName
 
 	// Your implementation to handle COM_INIT_DB
 	return ph.current_conn.UseDB(dbName)
@@ -51,24 +53,37 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 	for _, stmt := range stmts {
 		switch stmt {
 
+		case Use:
+			ph.current_conn.Execute(query)
+			return nil, nil
+
 		// read-only statements
 		case Select:
 			fallthrough
 		case Show:
 			fallthrough
-		case Use:
-			fallthrough
+
 		case Desc:
 			fallthrough
 		case Describe:
 			logWithGID(fmt.Sprintf("executing read-only query: %s", query))
 			return ph.current_conn.Execute(query)
 
+		case Insert:
+			if !ph.connectionLocked {
+				log.Println("locking connection to write server")
+				//ph.write_conn.Sequence = ph.read_conn.Sequence
+				ph.current_conn = ph.write_conn
+
+			}
+			ph.current_conn.UseDB(ph.databaseName)
+			log.Println("executing write query: ", query)
+			return ph.current_conn.Execute(query)
+
 		// write statements
 		case Update:
 			fallthrough
-		case Insert:
-			fallthrough
+
 		case Delete:
 			fallthrough
 		case Create:
@@ -86,9 +101,21 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		case Revoke:
 			fallthrough
 		case Set:
+			if !ph.connectionLocked {
+				log.Println("locking connection to write server")
+				//ph.write_conn.Sequence = ph.read_conn.Sequence
+				ph.current_conn = ph.write_conn
+
+			}
+			ph.current_conn.UseDB(ph.databaseName)
 			log.Println("executing write query: ", query)
-			ph.current_conn = ph.write_conn
-			return ph.current_conn.Execute(query)
+			res, err := ph.current_conn.Execute(query)
+			if err != nil {
+				return nil, err
+			}
+			log.Println("got result: ", res)
+
+			return nil, nil
 
 		default:
 			log.Panicf("Found an unknown statement type: %T\n", stmt)
