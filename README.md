@@ -30,7 +30,7 @@ DBInsight.tech is a high-performance, scalable, and secure proxy and load balanc
 1.  Clone the repository:
 
     ```bash
-    git clone https://github.com/jbhall78/dbinsight
+    git clone https://github.com/jbhall78/dbinsight.git
     ```
 
 2.  Navigate to the project directory:
@@ -53,6 +53,11 @@ DBInsight.tech is a high-performance, scalable, and secure proxy and load balanc
 
     ```bash
     docker build -t dbinsight-proxy .
+    ```
+    or
+
+```bash
+    make docker-build
     ```
 
 ### Configuration
