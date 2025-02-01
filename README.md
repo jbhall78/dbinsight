@@ -56,7 +56,7 @@ DBInsight.tech is a high-performance, scalable, and secure proxy and load balanc
     ```
     or
 
-```bash
+    ```bash
     make docker-build
     ```
 
