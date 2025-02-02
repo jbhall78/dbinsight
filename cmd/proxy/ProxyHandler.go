@@ -11,15 +11,16 @@ import (
 )
 
 type ProxyHandler struct {
-	p                *Proxy
-	read_conn        *client.Conn
-	write_conn       *client.Conn
-	current_conn     *client.Conn
-	readServer       *BackendServer
-	writeServer      *BackendServer
-	databaseName     string
-	initialDatabase  string
+	p            *Proxy
+	read_conn    *client.Conn
+	write_conn   *client.Conn
+	current_conn *client.Conn
+	readServer   *BackendServer
+	writeServer  *BackendServer
+	databaseName string
+	//	initialDatabase  string
 	connectionLocked bool
+	useCalled        bool
 	//mu               sync.RWMutex
 }
 
@@ -37,29 +38,33 @@ func (ph *ProxyHandler) UseDB(dbName string) error {
 	//defer ph.mu.Unlock()
 
 	if ph.current_conn == nil {
-		ph.initialDatabase = dbName
 		ph.databaseName = dbName
 		return nil //fmt.Errorf("called with no connection")
 	}
 	ph.databaseName = dbName
-	logWithGID(fmt.Sprintf("switching database to: '%s': %s\n", dbName, ph.current_conn.RemoteAddr()))
+	//logWithGID(fmt.Sprintf("switching database to: '%s': %s\n", dbName, ph.current_conn.RemoteAddr()))
 	// Your implementation to handle COM_INIT_DB
 	//err := ph.current_conn.UseDB(dbName)
 
 	query := "USE " + dbName + ";"
-	_, err := ph.current_conn.Execute(query)
-	if err != nil {
-		logWithGID(fmt.Sprintf("error received switching to database: %s\n", dbName))
-	}
-	return err
+
+	_, _ = ph.read_conn.Execute(query)
+	_, _ = ph.write_conn.Execute(query)
+
+	//if err != nil {
+	//		logWithGID(fmt.Sprintf("error received switching to database: %s\n", dbName))
+	//	}
+	return nil
 }
 
+/*
 func trimTrailingNull(s string) string {
 	if len(s) > 0 && s[len(s)-1] == '\x00' {
 		return s[:len(s)-1]
 	}
 	return s
 }
+*/
 
 func extractDatabaseName(query string) (string, error) {
 	// 1. Trim whitespace and convert to lowercase for case-insensitivity
@@ -89,11 +94,20 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		return nil, err
 	}
 
+	if !ph.useCalled {
+		ph.UseDB(ph.databaseName)
+		ph.useCalled = true
+	}
+
 	for _, stmt := range stmts {
 		switch stmt {
 
 		case Use:
-			res, err := ph.current_conn.Execute(query)
+			dbName, err := extractDatabaseName(query)
+			if err == nil {
+				ph.UseDB(dbName)
+			}
+			res, err := ph.current_conn.Execute(query) // redundant but we need the result packet
 			if err != nil {
 				return nil, err
 			}
@@ -110,7 +124,7 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			fallthrough
 		case Describe:
 			//logWithGID(fmt.Sprintf("executing read-only query: %s: %s\n", query, ph.current_conn.RemoteAddr()))
-			return ph.read_conn.Execute(query)
+			return ph.current_conn.Execute(query)
 
 		case Create:
 			fallthrough
@@ -123,29 +137,12 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		case Update:
 			fallthrough
 		case Insert:
-			if !ph.connectionLocked {
-				log.Println("locking connection to write server")
-				//ph.write_conn.Sequence = ph.read_conn.Sequence
-				ph.current_conn = ph.write_conn
-				ph.connectionLocked = true
-				ph.UseDB(ph.databaseName)
-			}
-			ph.UseDB(ph.databaseName)
 			//query = trimTrailingNull(query)
 			//logWithGID(fmt.Sprintf("executing write query: %s -- database: %s: server: %s\n", query, ph.current_conn.GetDB(), ph.current_conn.RemoteAddr()))
-			res, err := ph.current_conn.Execute(query)
-			if err != nil && err.Error() != "ERROR 1046 (3D000): No database selected" {
+			res, err := ph.write_conn.Execute(query)
+			if err != nil {
 				logWithGID(fmt.Sprintf("error: %s", err.Error()))
 				return nil, err
-			}
-			if err != nil && err.Error() == "ERROR 1046 (3D000): No database selected" {
-				if ph.databaseName != "" {
-					ph.UseDB(ph.databaseName)
-				}
-				res, err = ph.current_conn.Execute(query)
-				if err != nil {
-					return nil, err
-				}
 			}
 			res.Resultset = nil // force an OK packet to be sent by go-mysql
 			return res, nil
@@ -166,11 +163,10 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 				//ph.write_conn.Sequence = ph.read_conn.Sequence
 				ph.current_conn = ph.write_conn
 				ph.connectionLocked = true
-				ph.UseDB(ph.databaseName)
 			}
-			ph.current_conn.UseDB(ph.databaseName)
+			//ph.current_conn.UseDB(ph.databaseName)
 			//logWithGID(fmt.Sprintf("executing write query: %s\n", query))
-			res, err := ph.current_conn.Execute(query)
+			res, err := ph.write_conn.Execute(query)
 			if err != nil {
 				return nil, err
 			}

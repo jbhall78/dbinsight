@@ -9,8 +9,6 @@ import (
 	"sync"
 	"syscall"
 
-	"time"
-
 	"net/http"
 	_ "net/http/pprof"
 
@@ -38,11 +36,7 @@ const (
 
 // Connection represents a managed database connection
 type Connection struct {
-	Conn       *client.Conn
-	lastUsed   time.Time
-	serverType ServerType
-	dbName     string
-	mu         sync.RWMutex // Mutex for protecting the connection
+	Conn *client.Conn
 }
 
 func NewProxy(config *Config) (*Proxy, error) {
@@ -123,7 +117,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	defer p.wg.Done()
 	defer conn.Close()
 
-	logWithGID("handleConnection()")
+	//logWithGID("handleConnection()")
 
 	// create a new server connection
 	ph := NewProxyHandler(p)
@@ -148,7 +142,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		return
 	}
 
-	log.Println("Registered the connection with the server")
+	//log.Println("Registered the connection with the server")
 
 	user := host.GetUser()
 
@@ -161,42 +155,53 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	key := NewUserKey(ph.readServer.address, user, password)
+	read_key := NewUserKey(ph.readServer.address, user, password)
 	//ph.key = key
 
-	cl_conn, err := ph.readServer.GetNextConn(key)
+	cl_conn, err := ph.readServer.GetNextConn(read_key)
 	if err != nil {
 		panic(err)
 	}
 
-	key = NewUserKey(ph.writeServer.address, user, password)
-	sv_conn, err := ph.writeServer.GetNextConn(key)
+	write_key := NewUserKey(ph.writeServer.address, user, password)
+	sv_conn, err := ph.writeServer.GetNextConn(write_key)
 	if err != nil {
 		panic(err)
 	}
 
-	logWithGID(fmt.Sprintf("Proxy received connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
+	logWithGID(fmt.Sprintf("Proxy initiated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
 
 	ph.read_conn = cl_conn
-	defer ph.read_conn.Close()
+	//defer ph.read_conn.Close()
 
 	ph.write_conn = sv_conn
-	defer ph.write_conn.Close()
+	//defer ph.write_conn.Close()
 
 	ph.current_conn = ph.read_conn
 
 	// if a database is specified on the initial connect() we need this
-	if ph.initialDatabase != "" {
-		ph.UseDB(ph.initialDatabase)
-	}
+	ph.databaseName = "mysqlslap"
 
 	// as long as the client keeps sending commands, keep handling them
 	for {
 		if err := host.HandleCommand(); err != nil {
-			log.Printf("Received error on connection: %v\n", err)
-			return
+			if err.Error() != "connection closed" {
+				log.Printf("Received error on connection: %v\n", err)
+			}
+			break
 		}
 	}
+
+	err = ph.readServer.PutConn(read_key, cl_conn)
+	if err != nil {
+		logWithGID(err.Error())
+	}
+	ph.writeServer.PutConn(write_key, sv_conn)
+	if err != nil {
+		logWithGID(err.Error())
+	}
+
+	logWithGID(fmt.Sprintf("Proxy terminated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
 
 	/*
 	   // Bidirectional copy

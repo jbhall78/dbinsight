@@ -100,7 +100,7 @@ func (be *Backends) Initialize() error {
 			item.backend_pass,
 			"",
 			client.WithLogFunc(log.Printf), // Or your logging function
-			client.WithPoolLimits(10, 1000, 5),
+			client.WithPoolLimits(10, 100, 5),
 			client.WithConnOptions(), // No connection options
 		)
 		if err != nil {
@@ -170,6 +170,20 @@ func (bs *BackendServer) GetNextConn(key UserKey) (*client.Conn, error) {
 	conn, err := pool.GetConn(ctx)
 
 	return conn, err
+}
+
+func (bs *BackendServer) PutConn(key UserKey, conn *client.Conn) error {
+	bs.mu.Lock()         // Acquire a read lock
+	defer bs.mu.Unlock() // Release the read lock
+
+	pool, ok := bs.pools[key]
+	if !ok {
+		return fmt.Errorf("no pool available")
+	}
+
+	pool.PutConn(conn)
+
+	return nil
 }
 
 func (bs *BackendServer) AddPool(key UserKey, pool *client.Pool) {
