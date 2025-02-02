@@ -6,6 +6,7 @@ import (
 	"regexp" // For regular expressions
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Simplified AST structures (you'll need to expand these)
@@ -35,10 +36,58 @@ const (
 	Revoke
 )
 
-// Very basic tokenizer (you'll need to make this much more robust)
-func tokenize(query string) []string {
-	return strings.Fields(query) // Split by spaces (very simplistic)
+func Tokenize(query string) []string {
+	query = strings.TrimSpace(query) // Trim leading/trailing whitespace
+
+	var tokens []string
+	var currentToken strings.Builder
+
+	inString := false
+	stringQuote := byte(0) // Keep track of which quote type is used
+
+	for _, char := range query {
+		if inString {
+			if char == rune(stringQuote) {
+				inString = false
+				tokens = append(tokens, currentToken.String())
+				currentToken.Reset()
+			} else {
+				currentToken.WriteRune(char)
+			}
+		} else if unicode.IsSpace(char) {
+			if currentToken.Len() > 0 {
+				tokens = append(tokens, currentToken.String())
+				currentToken.Reset()
+			}
+		} else if char == '(' || char == ')' || char == ';' || char == ',' || char == '=' || char == '<' || char == '>' || char == '+' || char == '-' || char == '*' || char == '/' || char == '%' || char == '&' || char == '|' || char == '^' || char == '~' {
+			if currentToken.Len() > 0 {
+				tokens = append(tokens, currentToken.String())
+				currentToken.Reset()
+			}
+			tokens = append(tokens, string(char))
+		} else if char == '\'' || char == '"' {
+			if currentToken.Len() > 0 {
+				tokens = append(tokens, currentToken.String())
+				currentToken.Reset()
+			}
+			inString = true
+			stringQuote = byte(char)
+		} else {
+			currentToken.WriteRune(char)
+		}
+	}
+
+	if currentToken.Len() > 0 {
+		tokens = append(tokens, currentToken.String())
+	}
+
+	return tokens
 }
+
+// Very basic tokenizer (you'll need to make this much more robust)
+/*func tokenize(query string) []string {
+	return strings.Fields(query) // Split by spaces (very simplistic)
+}*/
 
 func parseSQL(query string) ([]interface{}, error) {
 	statements := splitAndProcessStatements(query, "8.0.33")
@@ -51,7 +100,7 @@ func parseSQL(query string) ([]interface{}, error) {
 			continue
 		}
 
-		tokens := tokenize(stmt)
+		tokens := Tokenize(stmt)
 		if len(tokens) == 0 {
 			continue // Skip empty statements
 		}
