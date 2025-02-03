@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/mysql" // Import the mysql package
@@ -39,7 +42,7 @@ func (ph *ProxyHandler) UseDB(dbName string) error {
 
 	if ph.current_conn == nil {
 		ph.databaseName = dbName
-		return nil //fmt.Errorf("called with no connection")
+		return nil
 	}
 	ph.databaseName = dbName
 	//logWithGID(fmt.Sprintf("switching database to: '%s': %s\n", dbName, ph.current_conn.RemoteAddr()))
@@ -48,12 +51,25 @@ func (ph *ProxyHandler) UseDB(dbName string) error {
 
 	query := "USE " + dbName + ";"
 
-	_, _ = ph.read_conn.Execute(query)
-	_, _ = ph.write_conn.Execute(query)
+	var wg sync.WaitGroup
+	wg.Add(2) // We're waiting for two operations
+
+	go func() {
+		defer wg.Done()
+		_, _ = ph.read_conn.Execute(query)
+	}()
+
+	go func() {
+		defer wg.Done()
+		_, _ = ph.write_conn.Execute(query)
+	}()
+
+	wg.Wait() // Wait for both goroutines to finish
 
 	//if err != nil {
 	//		logWithGID(fmt.Sprintf("error received switching to database: %s\n", dbName))
 	//	}
+
 	return nil
 }
 
@@ -104,13 +120,27 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 
 		case Use:
 			dbName, err := extractDatabaseName(query)
-			if err == nil {
-				ph.UseDB(dbName)
-			}
-			res, err := ph.current_conn.Execute(query) // redundant but we need the result packet
 			if err != nil {
-				return nil, err
+				continue
 			}
+			query := "USE " + dbName + ";"
+
+			var wg sync.WaitGroup
+			wg.Add(2) // We're waiting for two operations
+
+			var res *mysql.Result
+			go func() {
+				defer wg.Done()
+				res, _ = ph.read_conn.Execute(query)
+			}()
+
+			go func() {
+				defer wg.Done()
+				_, _ = ph.write_conn.Execute(query)
+			}()
+
+			wg.Wait() // Wait for both goroutines to finish
+
 			res.Resultset = nil // force an OK packet to be sent by go-mysql
 			return res, nil
 
@@ -124,7 +154,21 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			fallthrough
 		case Describe:
 			//logWithGID(fmt.Sprintf("executing read-only query: %s: %s\n", query, ph.current_conn.RemoteAddr()))
-			return ph.current_conn.Execute(query)
+			var res *mysql.Result
+			var err error
+
+			delay := 5.0
+
+			for i := 0; i < 90; i++ {
+				res, err = ph.current_conn.Execute(query)
+				if err == nil {
+					return res, nil
+				}
+				// check to see if it is a replication error first.
+				time.Sleep(time.Duration(delay))
+				delay = math.Min(delay*2, 100) // Double the delay, up to max
+			}
+			return nil, err
 
 		case Create:
 			fallthrough

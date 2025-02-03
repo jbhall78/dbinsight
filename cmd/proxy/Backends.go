@@ -145,8 +145,8 @@ func (be *Backends) GetNextReplica() (*BackendServer, error) {
 }
 
 func (be *Backends) GetWriter() (*BackendServer, error) {
-	be.mu.Lock()         // Acquire a read lock
-	defer be.mu.Unlock() // Release the read lock
+	be.mu.RLock()         // Acquire a read lock
+	defer be.mu.RUnlock() // Release the read lock
 
 	if be.primary == nil {
 		return nil, fmt.Errorf("no writer available")
@@ -158,8 +158,8 @@ func (be *Backends) GetWriter() (*BackendServer, error) {
 }
 
 func (bs *BackendServer) GetNextConn(key UserKey) (*client.Conn, error) {
-	bs.mu.Lock()         // Acquire a read lock
-	defer bs.mu.Unlock() // Release the read lock
+	bs.mu.RLock()         // Acquire a read lock
+	defer bs.mu.RUnlock() // Release the read lock
 
 	pool, ok := bs.pools[key]
 	if !ok {
@@ -173,8 +173,8 @@ func (bs *BackendServer) GetNextConn(key UserKey) (*client.Conn, error) {
 }
 
 func (bs *BackendServer) PutConn(key UserKey, conn *client.Conn) error {
-	bs.mu.Lock()         // Acquire a read lock
-	defer bs.mu.Unlock() // Release the read lock
+	bs.mu.RLock()         // Acquire a read lock
+	defer bs.mu.RUnlock() // Release the read lock
 
 	pool, ok := bs.pools[key]
 	if !ok {

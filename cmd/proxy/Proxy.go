@@ -192,10 +192,12 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		}
 	}
 
+	//cl_conn.Close()
 	err = ph.readServer.PutConn(read_key, cl_conn)
 	if err != nil {
 		logWithGID(err.Error())
 	}
+	//sv_conn.Close()
 	ph.writeServer.PutConn(write_key, sv_conn)
 	if err != nil {
 		logWithGID(err.Error())
