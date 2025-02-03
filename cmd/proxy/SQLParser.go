@@ -231,12 +231,6 @@ func parseStatement(tokens []string) (int, error) {
 	}
 }
 
-func removeComments(query string) string {
-	// Regex to match both types of comments (multi-line and single-line)
-	commentRegex := regexp.MustCompile(`(?s)/\*.*?\*/|--.*$`) // (?s) makes . match newlines
-	return commentRegex.ReplaceAllString(query, "")
-}
-
 // example usage:
 
 //func main() {
