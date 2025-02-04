@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.4
+
 # Use a suitable base image
 FROM golang:latest AS builder
 
@@ -7,13 +9,16 @@ WORKDIR /app
 # Copy go.mod and go.sum if they exist
 COPY go.mod go.sum ./
 
-COPY go-mysql/ .
+# Copy the forked library (crucial to do this BEFORE copying your code)
+COPY go-mysql/ /app/go-mysql/
 
-# Download dependencies (cache layer)
-RUN go mod download
+# Copy your application source code (cmd and data)
+COPY cmd/ /app/cmd/
+COPY data/ /app/data/
 
 # Copy the source code
-COPY . .
+COPY cmd/ .
+COPY data/ .
 
 # Build the proxy binary
 WORKDIR /app/cmd/proxy

@@ -17,7 +17,7 @@ output-qemu/$(PROJECT_NAME)-proxy-qemu:
 qemu-build: output-qemu/$(PROJECT_NAME)-proxy-qemu
 
 docker-build:
-	docker build -t $(PROJECT_NAME)-proxy:$(VERSION) .
+	DOCKER_BUILDKIT=1 docker build -t $(PROJECT_NAME)-proxy:$(VERSION) -f docker/images/proxy/Dockerfile .
 
 docker-run:
 	docker run -d --restart always -p 3306:3306 $(PROJECT_NAME)-proxy:$(VERSION)
