@@ -98,6 +98,32 @@ func extractDatabaseName(query string) (string, error) {
 	return match[1], nil // Return the captured database name
 }
 
+func isReplicationError(err error) bool {
+	str := err.Error()
+
+	re1 := regexp.MustCompile(`^ERROR (\d+) \((.+)\): (.+)$`) // Capturing groups
+
+	match := re1.FindStringSubmatch(str)
+	if match != nil {
+		errorCode := match[1]
+		//sqlState := match[2]
+		//errorString := match[3]
+		//fmt.Println("Match found!")
+		//fmt.Println("Error Code:", errorCode)
+
+		switch errorCode {
+		case "1146":
+			fallthrough
+		case "1049":
+			return true
+		default:
+			return false
+		}
+	}
+
+	return false
+}
+
 func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 	//log.Println("HandleQuery called with:", query)
 
@@ -157,14 +183,19 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 			var res *mysql.Result
 			var err error
 
-			delay := 5.0
+			delay := 1.0
 
-			for i := 0; i < 90; i++ {
+			for i := 0; i < 180; i++ {
 				res, err = ph.current_conn.Execute(query)
 				if err == nil {
 					return res, nil
 				}
+
 				// check to see if it is a replication error first.
+				if !isReplicationError(err) {
+					break
+				}
+
 				time.Sleep(time.Duration(delay))
 				delay = math.Min(delay*2, 100) // Double the delay, up to max
 			}

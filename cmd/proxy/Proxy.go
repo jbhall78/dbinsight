@@ -169,7 +169,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		panic(err)
 	}
 
-	logWithGID(fmt.Sprintf("Proxy initiated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
+	//logWithGID(fmt.Sprintf("Proxy initiated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
 
 	ph.read_conn = cl_conn
 	//defer ph.read_conn.Close()
@@ -203,7 +203,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		logWithGID(err.Error())
 	}
 
-	logWithGID(fmt.Sprintf("Proxy terminated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
+	//logWithGID(fmt.Sprintf("Proxy terminated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
 
 	/*
 	   // Bidirectional copy
