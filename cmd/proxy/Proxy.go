@@ -19,11 +19,13 @@ import (
 type Proxy struct {
 	config           *Config
 	listener         net.Listener
-	pools            *Backends
+	backends         *Backends
 	shutdown         chan struct{}
 	shutdownAccepter chan struct{}
-	wg               sync.WaitGroup
-	mgr              *server.InMemoryProvider
+	wg               sync.WaitGroup           // wait group for accepters
+	mu               sync.RWMutex             // lock for the clients array
+	mgr              *server.InMemoryProvider // in memory authentication map provider
+	clients          []*ProxyHandler          // list of our connected clients
 }
 
 type ServerType int
@@ -53,8 +55,8 @@ func (p *Proxy) Start() error {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	p.pools = NewBackends(p.config)
-	p.pools.Initialize()
+	p.backends = NewBackends(p.config)
+	p.backends.Initialize()
 
 	// create user database, this needs to be shared
 	p.mgr = server.NewInMemoryProvider()
@@ -68,6 +70,8 @@ func (p *Proxy) Start() error {
 		os.Exit(1)
 	}
 	p.listener = listener
+
+	p.clients = make([]*ProxyHandler, 0)
 
 	log.Printf("Proxy listening on %s", p.config.ListenAddress)
 
@@ -123,18 +127,23 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	ph := NewProxyHandler(p)
 
 	// obtain a connection from the pool
-	svr, err := p.pools.GetNextReplica()
+	svr, err := p.backends.GetNextReplica()
 	if err != nil {
 		panic(err)
 	}
 	ph.readServer = svr
 
 	// obtain a connection from the pool
-	svr, err = p.pools.GetWriter()
+	svr, err = p.backends.GetWriter()
 	if err != nil {
 		panic(err)
 	}
 	ph.writeServer = svr
+
+	// add to our list of clients
+	p.mu.Lock()
+	p.clients = append(p.clients, ph)
+	p.mu.Unlock()
 
 	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), p.mgr, ph)
 	if err != nil {
@@ -203,6 +212,16 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		logWithGID(err.Error())
 	}
 
+	// Remove our client
+	for i, proxyHandler := range p.clients {
+		if proxyHandler == ph {
+			p.mu.Lock()
+			p.clients = append(p.clients[:i], p.clients[i+1:]...) // Remove element at index idx
+			p.mu.Unlock()
+			break
+		}
+	}
+
 	//logWithGID(fmt.Sprintf("Proxy terminated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
 
 	/*
@@ -232,7 +251,12 @@ func (p *Proxy) Stop() error {
 		}
 	}
 
-	p.pools.Shutdown()
+	for _, proxyHandler := range p.clients {
+		proxyHandler.read_conn.Close()
+		proxyHandler.write_conn.Close()
+	}
+
+	p.backends.Shutdown()
 
 	p.wg.Wait()
 	log.Println("Proxy stopped")
