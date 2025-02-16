@@ -26,6 +26,7 @@ type Proxy struct {
 	mu               sync.RWMutex             // lock for the clients array
 	mgr              *server.InMemoryProvider // in memory authentication map provider
 	clients          []*ProxyHandler          // list of our connected clients
+	server           *server.Server
 }
 
 type ServerType int
@@ -72,6 +73,8 @@ func (p *Proxy) Start() error {
 	p.listener = listener
 
 	p.clients = make([]*ProxyHandler, 0)
+
+	p.server = server.NewDefaultServer()
 
 	log.Printf("Proxy listening on %s", p.config.ListenAddress)
 
@@ -141,7 +144,7 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	ph := NewProxyHandler(p, readServer, writeServer)
 
 	// create the handler
-	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), p.mgr, ph)
+	host, err := server.NewCustomizedConn(conn, p.server, p.mgr, ph)
 	if err != nil {
 		fmt.Printf("Received Error trying to create server instance: %s: %s\n", conn.RemoteAddr(), err.Error())
 		return

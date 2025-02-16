@@ -3,8 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
+
+	"runtime/pprof"
 
 	"gopkg.in/yaml.v3" // Or your preferred YAML library
 )
@@ -90,8 +93,23 @@ func loadConfig() (*Config, error) {
 	return &config, nil
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		defer f.Close() // make sure to close it when we're done
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
 
 	cfg, err := loadConfig()
 	if err != nil {

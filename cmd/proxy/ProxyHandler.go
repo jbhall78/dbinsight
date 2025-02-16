@@ -166,7 +166,8 @@ func (ph *ProxyHandler) ExecuteReadQuery(query string) (*mysql.Result, error) {
 
 	delay := 1.0
 
-	for i := 0; i < 180; i++ {
+	//for i := 0; i < 180; i++ {
+	for {
 		res, err = ph.current_conn.Execute(query)
 		if err == nil {
 			return res, nil
@@ -178,7 +179,7 @@ func (ph *ProxyHandler) ExecuteReadQuery(query string) (*mysql.Result, error) {
 		}
 
 		time.Sleep(time.Duration(delay))
-		delay = math.Min(delay*2, 1000) // Double the delay, up to max
+		delay = math.Min(delay*2, 10000) // Double the delay, up to max
 	}
 	return nil, err
 }
