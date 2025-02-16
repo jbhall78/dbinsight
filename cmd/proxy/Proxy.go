@@ -123,38 +123,38 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 
 	//logWithGID("handleConnection()")
 
-	// create a new server connection
-	ph := NewProxyHandler(p)
-
 	// obtain a connection from the pool
 	svr, err := p.backends.GetNextReplica()
 	if err != nil {
 		panic(err)
 	}
-	ph.readServer = svr
+	readServer := svr
 
 	// obtain a connection from the pool
 	svr, err = p.backends.GetWriter()
 	if err != nil {
 		panic(err)
 	}
-	ph.writeServer = svr
+	writeServer := svr
+
+	// create a new server connection
+	ph := NewProxyHandler(p, readServer, writeServer)
+
+	// create the handler
+	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), p.mgr, ph)
+	if err != nil {
+		fmt.Printf("Received Error trying to create server instance: %s: %s\n", conn.RemoteAddr(), err.Error())
+		return
+	}
 
 	// add to our list of clients
 	p.mu.Lock()
 	p.clients = append(p.clients, ph)
 	p.mu.Unlock()
 
-	host, err := server.NewCustomizedConn(conn, server.NewDefaultServer(), p.mgr, ph)
-	if err != nil {
-		fmt.Printf("Access denied from: %s\n", conn.RemoteAddr())
-		return
-	}
-
 	//log.Println("Registered the connection with the server")
 
 	user := host.GetUser()
-
 	user, err = p.config.GetBackendUser(user)
 	if err != nil {
 		panic(err)
@@ -164,16 +164,16 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	read_key := NewUserKey(ph.readServer.address, user, password)
+	read_key := NewUserKey(readServer.address, user, password)
 	//ph.key = key
 
-	cl_conn, err := ph.readServer.GetNextConn(read_key)
+	cl_conn, err := readServer.GetNextConn(read_key)
 	if err != nil {
 		panic(err)
 	}
 
-	write_key := NewUserKey(ph.writeServer.address, user, password)
-	sv_conn, err := ph.writeServer.GetNextConn(write_key)
+	write_key := NewUserKey(writeServer.address, user, password)
+	sv_conn, err := writeServer.GetNextConn(write_key)
 	if err != nil {
 		panic(err)
 	}
@@ -181,15 +181,8 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	//logWithGID(fmt.Sprintf("Proxy initiated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
 
 	ph.read_conn = cl_conn
-	//defer ph.read_conn.Close()
-
 	ph.write_conn = sv_conn
-	//defer ph.write_conn.Close()
-
 	ph.current_conn = ph.read_conn
-
-	// if a database is specified on the initial connect() we need this
-	ph.databaseName = "mysqlslap"
 
 	// as long as the client keeps sending commands, keep handling them
 	for {
@@ -222,24 +215,6 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		}
 	}
 
-	//logWithGID(fmt.Sprintf("Proxy terminated connection for user '%s' from '%s' and is assigned to user '%s' on MySQL server '%s'\n", host.GetUser(), conn.RemoteAddr(), user, cl_conn.RemoteAddr()))
-
-	/*
-	   // Bidirectional copy
-
-	   	go func() {
-	   		_, err := io.Copy(server.Conn, conn)
-	   		if err != nil && !isClosedError(err) {
-	   			fmt.Printf("Error copying from client to server: %v\n", err)
-	   		}
-	   	}()
-
-	   _, err = io.Copy(conn, server.Conn)
-
-	   	if err != nil && !isClosedError(err) {
-	   		fmt.Printf("Error copying from server to client: %v\n", err)
-	   	}
-	*/
 }
 
 func (p *Proxy) Stop() error {

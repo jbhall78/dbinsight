@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"runtime"
@@ -21,6 +22,7 @@ type AuthenticationMapItem struct {
 }
 
 type Config struct {
+	LogQueries             bool
 	ProxyUser              string                  `yaml:"proxy_user"`
 	ProxyPassword          string                  `yaml:"proxy_password"`
 	BackendPrimaryHost     string                  `yaml:"backend_primary_host"`
@@ -55,6 +57,7 @@ func (c *Config) GetBackendPassword(user string) (string, error) {
 
 func loadConfig() (*Config, error) {
 	config := Config{
+		LogQueries:             false,
 		ProxyUser:              "root",
 		ProxyPassword:          "changeme",
 		BackendPrimaryHost:     "127.0.0.1",
@@ -94,6 +97,28 @@ func main() {
 	if err != nil {
 		fmt.Println("Couldn't load configuration file")
 		os.Exit(1)
+	}
+
+	logQueries := flag.Bool("log-queries", false, "Enable logging of queries")
+
+	// Parse the command-line arguments.  This must be done *before*
+	// you access the flag's value.
+	flag.Parse()
+
+	// Access the flag's value.
+	if *logQueries {
+		fmt.Println("Query logging is enabled")
+		cfg.LogQueries = true
+	} else {
+		fmt.Println("Query logging is disabled")
+	}
+
+	// Access any other command-line arguments (non-flags)
+	if flag.NArg() > 0 {
+		fmt.Println("Non-flag arguments:")
+		for _, arg := range flag.Args() {
+			fmt.Println(arg)
+		}
 	}
 
 	fmt.Println("MySQL Primary Host:", cfg.BackendPrimaryHost)

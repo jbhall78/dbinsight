@@ -25,13 +25,19 @@ type ProxyHandler struct {
 	connectionLocked bool
 	useCalled        bool
 	//mu               sync.RWMutex
+
+	deferBegin bool
 }
 
-func NewProxyHandler(proxy *Proxy) *ProxyHandler {
+func NewProxyHandler(proxy *Proxy, readServer *BackendServer, writeServer *BackendServer) *ProxyHandler {
 	// NOTE: most of the initialization code for this struct is
 	//       handled in handleConnection()
 
-	return &ProxyHandler{p: proxy} // Initialize any internal state here
+	return &ProxyHandler{
+		p:           proxy,
+		readServer:  readServer,
+		writeServer: writeServer,
+	} // Initialize any internal state here
 }
 
 func (ph *ProxyHandler) UseDB(dbName string) error {
@@ -124,12 +130,77 @@ func isReplicationError(err error) bool {
 	return false
 }
 
-func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
-	//log.Println("HandleQuery called with:", query)
+func (ph *ProxyHandler) ExecuteUseQuery(query string) (*mysql.Result, error) {
+	dbName, err := extractDatabaseName(query)
+	if err != nil {
+		return nil, err
+	}
+	q := "USE " + dbName + ";"
 
-	//ph.mu.Lock()
-	//defer ph.mu.Unlock()
+	var wg sync.WaitGroup
+	wg.Add(2) // We're waiting for two operations
 
+	var res *mysql.Result
+	go func() {
+		defer wg.Done()
+		res, _ = ph.read_conn.Execute(q)
+	}()
+
+	go func() {
+		defer wg.Done()
+		_, _ = ph.write_conn.Execute(q)
+	}()
+
+	wg.Wait() // Wait for both goroutines to finish
+
+	res.Resultset = nil // force an OK packet to be sent by go-mysql
+	return res, nil
+}
+
+func (ph *ProxyHandler) ExecuteReadQuery(query string) (*mysql.Result, error) {
+	if ph.p.config.LogQueries {
+		logWithGID(fmt.Sprintf("executing read-only query: %s: %s\n", query, ph.current_conn.RemoteAddr()))
+	}
+	var res *mysql.Result
+	var err error
+
+	delay := 1.0
+
+	for i := 0; i < 180; i++ {
+		res, err = ph.current_conn.Execute(query)
+		if err == nil {
+			return res, nil
+		}
+
+		// check to see if it is a replication error first.
+		if !isReplicationError(err) {
+			break
+		}
+
+		time.Sleep(time.Duration(delay))
+		delay = math.Min(delay*2, 1000) // Double the delay, up to max
+	}
+	return nil, err
+}
+
+func (ph *ProxyHandler) ExecuteWriteQuery(query string) (*mysql.Result, error) {
+	//query = trimTrailingNull(query)
+	if ph.p.config.LogQueries {
+		logWithGID(fmt.Sprintf("executing write query: %s -- database: %s: server: %s\n", query, ph.write_conn.GetDB(), ph.write_conn.RemoteAddr()))
+	}
+	res, err := ph.write_conn.Execute(query)
+	if err != nil {
+		logWithGID(fmt.Sprintf("error: %s", err.Error()))
+		return nil, err
+	}
+	// go-mysql/client returns ResultSet
+	// go-mysql/server only sends and OK packet when ResultSet is nil
+	res.Resultset = nil // force an OK packet to be sent by go-mysql
+	// this will have to be removed in the future when this is fixed in go-mysql
+	return res, nil
+}
+
+func (ph *ProxyHandler) ExecuteQuery(query string) (*mysql.Result, error) {
 	stmts, err := parseSQL(query)
 	if err != nil {
 		log.Println(err)
@@ -145,62 +216,19 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		switch stmt {
 
 		case Use:
-			dbName, err := extractDatabaseName(query)
-			if err != nil {
-				continue
-			}
-			query := "USE " + dbName + ";"
-
-			var wg sync.WaitGroup
-			wg.Add(2) // We're waiting for two operations
-
-			var res *mysql.Result
-			go func() {
-				defer wg.Done()
-				res, _ = ph.read_conn.Execute(query)
-			}()
-
-			go func() {
-				defer wg.Done()
-				_, _ = ph.write_conn.Execute(query)
-			}()
-
-			wg.Wait() // Wait for both goroutines to finish
-
-			res.Resultset = nil // force an OK packet to be sent by go-mysql
-			return res, nil
+			return ph.ExecuteUseQuery(query)
 
 		// read-only statements
 		case Select:
 			fallthrough
 		case Show:
 			fallthrough
-
 		case Desc:
 			fallthrough
 		case Describe:
-			//logWithGID(fmt.Sprintf("executing read-only query: %s: %s\n", query, ph.current_conn.RemoteAddr()))
-			var res *mysql.Result
-			var err error
+			return ph.ExecuteReadQuery(query)
 
-			delay := 1.0
-
-			for i := 0; i < 180; i++ {
-				res, err = ph.current_conn.Execute(query)
-				if err == nil {
-					return res, nil
-				}
-
-				// check to see if it is a replication error first.
-				if !isReplicationError(err) {
-					break
-				}
-
-				time.Sleep(time.Duration(delay))
-				delay = math.Min(delay*2, 100) // Double the delay, up to max
-			}
-			return nil, err
-
+		// write statements
 		case Create:
 			fallthrough
 		case Alter:
@@ -212,17 +240,7 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 		case Update:
 			fallthrough
 		case Insert:
-			//query = trimTrailingNull(query)
-			//logWithGID(fmt.Sprintf("executing write query: %s -- database: %s: server: %s\n", query, ph.current_conn.GetDB(), ph.current_conn.RemoteAddr()))
-			res, err := ph.write_conn.Execute(query)
-			if err != nil {
-				logWithGID(fmt.Sprintf("error: %s", err.Error()))
-				return nil, err
-			}
-			res.Resultset = nil // force an OK packet to be sent by go-mysql
-			return res, nil
-
-		// write statements
+			return ph.ExecuteWriteQuery(query)
 
 		case Truncate:
 			fallthrough
@@ -239,36 +257,94 @@ func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
 				ph.current_conn = ph.write_conn
 				ph.connectionLocked = true
 			}
-			//ph.current_conn.UseDB(ph.databaseName)
-			//logWithGID(fmt.Sprintf("executing write query: %s\n", query))
-			res, err := ph.write_conn.Execute(query)
-			if err != nil {
-				return nil, err
-			}
-
-			return res, nil
+			return ph.ExecuteWriteQuery(query)
 
 		default:
-			log.Panicf("Found an unknown statement type: %T\n", stmt)
+			log.Panicf("Found an unknown statement type: %s\n", query)
 		}
 	}
 
 	return nil, fmt.Errorf("empty statements")
 }
 
+func (ph *ProxyHandler) HandleQuery(query string) (*mysql.Result, error) {
+	//log.Println("HandleQuery called with:", query)
+	return ph.ExecuteQuery(query)
+}
+
 // COM_FIELD_LIST is deprecated so this doesn't need to be implemented
 func (ph *ProxyHandler) HandleFieldList(table string, fieldWildcard string) ([]*mysql.Field, error) {
-
 	return nil, nil
 }
 
 func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int, context interface{}, err error) {
-	log.Println("HandleStmtPrepare called with query:", query)
-
-	// 1. Prepare the statement on the backend server
-	stmt, err := ph.current_conn.Prepare(query)
+	//log.Println("HandleStmtPrepare called with query:", query)
+	sqlStatements, err := parseSQL(query)
 	if err != nil {
-		return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
+		log.Println(err.Error())
+		return 0, 0, nil, fmt.Errorf("error parsing sql: %s", err.Error())
+	}
+
+	if len(sqlStatements) != 1 {
+		return 0, 0, nil, fmt.Errorf("error parsing sql: wrong number of SQL statements for prepare command")
+	}
+
+	if !ph.useCalled {
+		ph.UseDB(ph.databaseName)
+		ph.useCalled = true
+	}
+
+	var stmt *client.Stmt
+
+	for _, sqlStatement := range sqlStatements {
+		switch sqlStatement {
+
+		case Select:
+			fallthrough
+		case Show:
+			fallthrough
+		case Desc:
+			fallthrough
+		case Describe:
+			fallthrough
+
+			// write statements
+		case Create:
+			fallthrough
+		case Alter:
+			fallthrough
+		case Drop:
+			fallthrough
+		case Delete:
+			fallthrough
+		case Update:
+			fallthrough
+		case Insert:
+
+		case Truncate:
+			fallthrough
+		case Rename:
+			fallthrough
+		case Grant:
+			fallthrough
+		case Revoke:
+			fallthrough
+		case Set:
+		case Begin:
+			if !ph.connectionLocked {
+				log.Println("locking connection to write server")
+				ph.current_conn = ph.write_conn
+				ph.connectionLocked = true
+			}
+			// 1. Prepare the statement on the backend server
+			stmt, err = ph.current_conn.Prepare(query)
+			if err != nil {
+				logWithGID(fmt.Sprintf("error preparing statement on backend: %s", err.Error()))
+				return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
+			}
+		default:
+			log.Panicf("Found an unknown statement type: %s\n", query)
+		}
 	}
 
 	// 2. Get the number of parameters and columns
@@ -282,7 +358,7 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 }
 
 func (ph *ProxyHandler) HandleStmtExecute(context interface{}, query string, args []interface{}) (*mysql.Result, error) {
-	log.Println("HandleStmtExecute called with query:", query, "and args:", args)
+	//log.Println("HandleStmtExecute called with query:", query, "and args:", args)
 
 	// 1. Retrieve the prepared statement from the context
 	backendStmt, ok := context.(*client.Stmt) // Type assertion to *client.Stmt
@@ -300,7 +376,7 @@ func (ph *ProxyHandler) HandleStmtExecute(context interface{}, query string, arg
 }
 
 func (ph *ProxyHandler) HandleStmtClose(context interface{}) error {
-	log.Println("HandleStmtClose called with context:", context)
+	//log.Println("HandleStmtClose called with context:", context)
 
 	// 1. Retrieve the prepared statement from the context
 	backendStmt, ok := context.(*client.Stmt) // Type assertion to *client.Stmt

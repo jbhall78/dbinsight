@@ -1,5 +1,5 @@
 PROJECT_NAME = dbinsight
-VERSION = 0.1.1
+VERSION = 0.1.3
 
 all: $(PROJECT_NAME)-proxy $(PROJECT_NAME)-create-db
 
@@ -20,7 +20,7 @@ docker-build:
 	DOCKER_BUILDKIT=1 docker build -t $(PROJECT_NAME)-proxy:$(VERSION) -f docker/images/proxy/Dockerfile .
 
 docker-run:
-	docker run -d --restart always -p 3306:3306 $(PROJECT_NAME)-proxy:$(VERSION)
+	docker run -d --name dbinsight-proxy --restart always --net=host -p 3306:3306 $(PROJECT_NAME)-proxy:$(VERSION)
 
 #test:
 #	go test ./internal/... ./pkg/... # Run tests

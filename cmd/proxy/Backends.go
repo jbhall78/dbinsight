@@ -198,20 +198,20 @@ func (bs *BackendServer) DeletePool(key UserKey) {
 	delete(bs.pools, key)
 }
 
-func (pools *Backends) Shutdown() error {
+func (be *Backends) Shutdown() error {
 	//close(pools.healthCheckShutdown)
-	pools.mu.Lock()
-	defer pools.mu.Unlock()
+	be.mu.Lock()
+	defer be.mu.Unlock()
 
 	// readers
-	for _, ps := range pools.replicas {
+	for _, ps := range be.replicas {
 		for _, pool := range ps.pools {
 			pool.Close()
 		}
 	}
 
 	// writers
-	for _, pool := range pools.primary.pools {
+	for _, pool := range be.primary.pools {
 		pool.Close()
 	}
 

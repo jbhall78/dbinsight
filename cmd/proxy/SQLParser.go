@@ -34,6 +34,9 @@ const (
 	Rename
 	Grant
 	Revoke
+
+	// query prepare commands
+	Begin
 )
 
 func Tokenize(query string) []string {
@@ -90,6 +93,7 @@ func Tokenize(query string) []string {
 }*/
 
 func parseSQL(query string) ([]interface{}, error) {
+	//fmt.Println("Parsing Query: ", query)
 	statements := splitAndProcessStatements(query, "8.0.33")
 
 	parsedStatements := make([]interface{}, 0)
@@ -187,7 +191,7 @@ func parseStatement(tokens []string) (int, error) {
 		return 0, fmt.Errorf("empty statement")
 	}
 
-	if len(tokens) < 2 {
+	if len(tokens) < 1 {
 		return 0, fmt.Errorf("invalid statement")
 	}
 
@@ -226,6 +230,10 @@ func parseStatement(tokens []string) (int, error) {
 		return Grant, nil
 	case "REVOKE":
 		return Revoke, nil
+
+	case "BEGIN":
+		return Begin, nil
+
 	default:
 		return 0, fmt.Errorf("unsupported statement type: %s", tokens[0])
 	}
