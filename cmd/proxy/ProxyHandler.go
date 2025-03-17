@@ -26,7 +26,14 @@ type ProxyHandler struct {
 	useCalled        bool
 	//mu               sync.RWMutex
 
-	deferBegin bool
+	deferBegin    bool
+	inTransaction bool
+}
+
+type Transaction struct {
+	stmt        *client.Stmt
+	beginResult *mysql.Result
+	beginError  error
 }
 
 func NewProxyHandler(proxy *Proxy, readServer *BackendServer, writeServer *BackendServer) *ProxyHandler {
@@ -279,7 +286,7 @@ func (ph *ProxyHandler) HandleFieldList(table string, fieldWildcard string) ([]*
 }
 
 func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int, context interface{}, err error) {
-	//log.Println("HandleStmtPrepare called with query:", query)
+	log.Println("HandleStmtPrepare called with query:", query)
 	sqlStatements, err := parseSQL(query)
 	if err != nil {
 		log.Println(err.Error())
@@ -295,10 +302,28 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 		ph.useCalled = true
 	}
 
-	var stmt *client.Stmt
+	var ctx *Transaction = &Transaction{}
 
 	for _, sqlStatement := range sqlStatements {
 		switch sqlStatement {
+
+		case Begin:
+			if !ph.connectionLocked {
+				log.Println("locking connection to write server")
+				ph.current_conn = ph.write_conn
+				ph.connectionLocked = true
+			}
+			ph.inTransaction = true
+			//ctx.beginResult, ctx.beginError = ph.current_conn.Execute(query)
+			return 0, 0, ctx, nil
+		case Commit:
+			ph.inTransaction = false
+			//_, err = ph.current_conn.Execute(query)
+			return 0, 0, ctx, nil
+		case Rollback:
+			ph.inTransaction = false
+			//_, err = ph.current_conn.Execute(query)
+			return 0, 0, ctx, nil
 
 		case Select:
 			fallthrough
@@ -321,7 +346,12 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 		case Update:
 			fallthrough
 		case Insert:
-
+			// 1. Prepare the statement on the backend server
+			ctx.stmt, err = ph.current_conn.Prepare(query)
+			if err != nil {
+				logWithGID(fmt.Sprintf("error preparing statement on backend: %s", err.Error()))
+				return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
+			}
 		case Truncate:
 			fallthrough
 		case Rename:
@@ -331,14 +361,13 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 		case Revoke:
 			fallthrough
 		case Set:
-		case Begin:
 			if !ph.connectionLocked {
 				log.Println("locking connection to write server")
 				ph.current_conn = ph.write_conn
 				ph.connectionLocked = true
 			}
 			// 1. Prepare the statement on the backend server
-			stmt, err = ph.current_conn.Prepare(query)
+			ctx.stmt, err = ph.current_conn.Prepare(query)
 			if err != nil {
 				logWithGID(fmt.Sprintf("error preparing statement on backend: %s", err.Error()))
 				return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
@@ -349,43 +378,86 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 	}
 
 	// 2. Get the number of parameters and columns
-	params = stmt.ParamNum()
-	columns = stmt.ColumnNum()
+	params = ctx.stmt.ParamNum()
+	columns = ctx.stmt.ColumnNum()
 
 	// 3. Store the prepared statement in the context
-	context = stmt // Store the *backend* prepared statement
+	context = ctx // Store the *backend* prepared statement
 
 	return params, columns, context, nil
 }
 
 func (ph *ProxyHandler) HandleStmtExecute(context interface{}, query string, args []interface{}) (*mysql.Result, error) {
-	//log.Println("HandleStmtExecute called with query:", query, "and args:", args)
+	log.Println("HandleStmtExecute called with query:", query, "and args:", args)
 
 	// 1. Retrieve the prepared statement from the context
-	backendStmt, ok := context.(*client.Stmt) // Type assertion to *client.Stmt
+	ctx, ok := context.(*Transaction) // Type assertion to *client.Stmt
 	if !ok {
-		return nil, fmt.Errorf("invalid context: expected *client.Stmt")
+		return nil, fmt.Errorf("invalid context: expected *Transaction")
 	}
 
-	// 2. Execute the prepared statement on the backend server
-	result, err := backendStmt.Execute(args...)
+	/*	if ctx.stmt == nil && ctx.beginResult != nil {
+		ctx.beginResult = nil
+		return ctx.beginResult, ctx.beginError
+	}*/
+
+	var err error
+	/*	if ctx.stmt == nil {
+		ctx.stmt, err = ph.current_conn.Prepare(query)
+		if err != nil {
+			logWithGID(fmt.Sprintf("error preparing statement on backend: %s", err.Error()))
+			return nil, fmt.Errorf("error preparing statement on backend: %w", err)
+		}
+	}*/
+
+	sqlStatements, err := parseSQL(query)
 	if err != nil {
-		return nil, fmt.Errorf("error executing prepared statement: %w", err)
+		log.Println(err.Error())
+		return nil, fmt.Errorf("error parsing sql: %s", err.Error())
 	}
 
-	return result, nil
+	if len(sqlStatements) != 1 {
+		return nil, fmt.Errorf("error parsing sql: wrong number of SQL statements for prepare command")
+	}
+
+	for _, sqlStatement := range sqlStatements {
+		switch sqlStatement {
+		case Begin:
+			fallthrough
+		case Rollback:
+			fallthrough
+		case Commit:
+			result, err := ph.current_conn.Execute(query)
+			if err != nil {
+				log.Printf("Cannot execute begin/commit/rollback in prepared query: %s", err.Error())
+				return nil, err
+			}
+			result.Resultset = nil
+			return result, nil
+		default:
+			// 2. Execute the prepared statement on the backend server
+			fmt.Printf("Context: %v\n", ctx.stmt)
+			result, err := ctx.stmt.Execute(args...)
+			if err != nil {
+				return nil, fmt.Errorf("error executing prepared statement: %w", err)
+			}
+			fmt.Printf("Arg type: %T\n", args[0])
+			fmt.Println("Executed statement")
+			return result, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unreached code")
 }
 
 func (ph *ProxyHandler) HandleStmtClose(context interface{}) error {
 	//log.Println("HandleStmtClose called with context:", context)
-
-	// 1. Retrieve the prepared statement from the context
-	backendStmt, ok := context.(*client.Stmt) // Type assertion to *client.Stmt
+	ctx, ok := context.(*Transaction) // Type assertion to *client.Stmt
 	if !ok {
-		return fmt.Errorf("invalid context: expected *client.Stmt")
+		return fmt.Errorf("invalid context: expected *Transaction")
 	}
 
-	backendStmt.Close()
+	ctx.stmt.Close()
 
 	// Your implementation to handle COM_STMT_CLOSE
 	return nil

@@ -35,8 +35,10 @@ const (
 	Grant
 	Revoke
 
-	// query prepare commands
+	// transaction commands
 	Begin
+	Commit
+	Rollback
 )
 
 func Tokenize(query string) []string {
@@ -233,6 +235,10 @@ func parseStatement(tokens []string) (int, error) {
 
 	case "BEGIN":
 		return Begin, nil
+	case "COMMIT":
+		return Commit, nil
+	case "ROLLBACK":
+		return Rollback, nil
 
 	default:
 		return 0, fmt.Errorf("unsupported statement type: %s", tokens[0])
