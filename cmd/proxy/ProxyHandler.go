@@ -28,6 +28,10 @@ type ProxyHandler struct {
 
 	deferBegin    bool
 	inTransaction bool
+
+	preparedStmts map[uint32]*client.Stmt
+	stmtCounter   uint32
+	stmtMutex     sync.Mutex
 }
 
 type Transaction struct {
@@ -41,9 +45,11 @@ func NewProxyHandler(proxy *Proxy, readServer *BackendServer, writeServer *Backe
 	//       handled in handleConnection()
 
 	return &ProxyHandler{
-		p:           proxy,
-		readServer:  readServer,
-		writeServer: writeServer,
+		p:             proxy,
+		readServer:    readServer,
+		writeServer:   writeServer,
+		preparedStmts: make(map[uint32]*client.Stmt),
+		stmtCounter:   1, // Start counter from 1
 	} // Initialize any internal state here
 }
 
@@ -302,7 +308,8 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 		ph.useCalled = true
 	}
 
-	var ctx *Transaction = &Transaction{}
+	//var ctx *Transaction = &Transaction{}
+	var stmt *client.Stmt
 
 	for _, sqlStatement := range sqlStatements {
 		switch sqlStatement {
@@ -315,15 +322,15 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 			}
 			ph.inTransaction = true
 			//ctx.beginResult, ctx.beginError = ph.current_conn.Execute(query)
-			return 0, 0, ctx, nil
+			return 0, 0, nil, nil
 		case Commit:
 			ph.inTransaction = false
 			//_, err = ph.current_conn.Execute(query)
-			return 0, 0, ctx, nil
+			return 0, 0, nil, nil
 		case Rollback:
 			ph.inTransaction = false
 			//_, err = ph.current_conn.Execute(query)
-			return 0, 0, ctx, nil
+			return 0, 0, nil, nil
 
 		case Select:
 			fallthrough
@@ -347,7 +354,7 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 			fallthrough
 		case Insert:
 			// 1. Prepare the statement on the backend server
-			ctx.stmt, err = ph.current_conn.Prepare(query)
+			stmt, err = ph.current_conn.Prepare(query)
 			if err != nil {
 				logWithGID(fmt.Sprintf("error preparing statement on backend: %s", err.Error()))
 				return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
@@ -367,7 +374,7 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 				ph.connectionLocked = true
 			}
 			// 1. Prepare the statement on the backend server
-			ctx.stmt, err = ph.current_conn.Prepare(query)
+			stmt, err = ph.current_conn.Prepare(query)
 			if err != nil {
 				logWithGID(fmt.Sprintf("error preparing statement on backend: %s", err.Error()))
 				return 0, 0, nil, fmt.Errorf("error preparing statement on backend: %w", err)
@@ -378,11 +385,18 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 	}
 
 	// 2. Get the number of parameters and columns
-	params = ctx.stmt.ParamNum()
-	columns = ctx.stmt.ColumnNum()
+	params = stmt.ParamNum()
+	columns = stmt.ColumnNum()
 
-	// 3. Store the prepared statement in the context
-	context = ctx // Store the *backend* prepared statement
+	// Store the prepared statement and generate a unique key
+	ph.stmtMutex.Lock()
+	stmtKey := ph.stmtCounter
+	ph.stmtCounter++
+	ph.preparedStmts[stmtKey] = stmt
+	ph.stmtMutex.Unlock()
+
+	// Pass the key as context
+	context = stmtKey
 
 	return params, columns, context, nil
 }
@@ -390,64 +404,91 @@ func (ph *ProxyHandler) HandleStmtPrepare(query string) (params int, columns int
 func (ph *ProxyHandler) HandleStmtExecute(context interface{}, query string, args []interface{}) (*mysql.Result, error) {
 	log.Println("HandleStmtExecute called with query:", query, "and args:", args)
 
-	// 1. Retrieve the prepared statement from the context
-	ctx, ok := context.(*Transaction) // Type assertion to *client.Stmt
-	if !ok {
-		return nil, fmt.Errorf("invalid context: expected *Transaction")
-	}
-
-	/*	if ctx.stmt == nil && ctx.beginResult != nil {
-		ctx.beginResult = nil
-		return ctx.beginResult, ctx.beginError
-	}*/
-
-	var err error
-	/*	if ctx.stmt == nil {
-		ctx.stmt, err = ph.current_conn.Prepare(query)
+	// Handle BEGIN, COMMIT, ROLLBACK (context is nil)
+	if context == nil {
+		result, err := ph.current_conn.Execute(query)
 		if err != nil {
-			logWithGID(fmt.Sprintf("error preparing statement on backend: %s", err.Error()))
-			return nil, fmt.Errorf("error preparing statement on backend: %w", err)
+			return nil, fmt.Errorf("error executing BEGIN/COMMIT/ROLLBACK: %w", err)
 		}
-	}*/
+		result.Resultset = nil // Force an OK packet
+		return result, nil
+	}
 
-	sqlStatements, err := parseSQL(query)
+	// Retrieve the key from the context (for prepared statements)
+	stmtKey, ok := context.(uint32)
+	if !ok {
+		return nil, fmt.Errorf("invalid context: expected statement key (uint32)")
+	}
+
+	// Retrieve the prepared statement from the map
+	ph.stmtMutex.Lock()
+	stmt, ok := ph.preparedStmts[stmtKey]
+	ph.stmtMutex.Unlock()
+
+	if !ok {
+		return nil, fmt.Errorf("prepared statement not found for key: %d", stmtKey)
+	}
+
+	// Execute the prepared statement
+	result, err := stmt.Execute(args...)
 	if err != nil {
-		log.Println(err.Error())
-		return nil, fmt.Errorf("error parsing sql: %s", err.Error())
+		return nil, err
 	}
 
-	if len(sqlStatements) != 1 {
-		return nil, fmt.Errorf("error parsing sql: wrong number of SQL statements for prepare command")
-	}
+	logWithGID(fmt.Sprintf("Executed statement: %d", stmtKey))
+	return result, nil
 
-	for _, sqlStatement := range sqlStatements {
-		switch sqlStatement {
-		case Begin:
-			fallthrough
-		case Rollback:
-			fallthrough
-		case Commit:
-			result, err := ph.current_conn.Execute(query)
-			if err != nil {
-				log.Printf("Cannot execute begin/commit/rollback in prepared query: %s", err.Error())
-				return nil, err
-			}
-			result.Resultset = nil
-			return result, nil
-		default:
-			// 2. Execute the prepared statement on the backend server
-			fmt.Printf("Context: %v\n", ctx.stmt)
-			result, err := ctx.stmt.Execute(args...)
-			if err != nil {
-				return nil, fmt.Errorf("error executing prepared statement: %w", err)
-			}
-			fmt.Printf("Arg type: %T\n", args[0])
-			fmt.Println("Executed statement")
-			return result, nil
-		}
-	}
+	/*
+	   // 1. Retrieve the prepared statement from the context
+	   ctx, ok := context.(*Transaction) // Type assertion to *client.Stmt
 
-	return nil, fmt.Errorf("unreached code")
+	   	if !ok {
+	   		return nil, fmt.Errorf("invalid context: expected *Transaction")
+	   	}
+
+	   var err error
+
+	   sqlStatements, err := parseSQL(query)
+
+	   	if err != nil {
+	   		log.Println(err.Error())
+	   		return nil, fmt.Errorf("error parsing sql: %s", err.Error())
+	   	}
+
+	   	if len(sqlStatements) != 1 {
+	   		return nil, fmt.Errorf("error parsing sql: wrong number of SQL statements for prepare command")
+	   	}
+
+	   	for _, sqlStatement := range sqlStatements {
+	   		switch sqlStatement {
+	   		case Begin:
+	   			fallthrough
+	   		case Rollback:
+	   			fallthrough
+	   		case Commit:
+	   			result, err := ph.current_conn.Execute(query)
+	   			if err != nil {
+	   				log.Printf("Cannot execute begin/commit/rollback in prepared query: %s", err.Error())
+	   				return nil, err
+	   			}
+	   			result.Resultset = nil
+	   			return result, nil
+	   		default:
+	   			// 2. Execute the prepared statement on the backend server
+	   			fmt.Printf("Context: %v\n", ctx.stmt)
+	   			result, err := ctx.stmt.Execute(args...)
+	   			if err != nil {
+	   				return nil, fmt.Errorf("error executing prepared statement: %w", err)
+	   			}
+	   			//fmt.Printf("Arg type: %T\n", args[0])
+	   			fmt.Println("Executed statement")
+	   			fmt.Printf("Response type %T\n", result)
+	   			return result, nil
+	   		}
+	   	}
+
+	   return nil, fmt.Errorf("unreached code")
+	*/
 }
 
 func (ph *ProxyHandler) HandleStmtClose(context interface{}) error {
