@@ -1,4 +1,4 @@
-# DBInsight.tech - MySQL Proxy and Load Balancer
+# DBInsight - MySQL Proxy and Load Balancer
 
 DBInsight.tech is a high-performance, scalable, and secure proxy and load balancer for MySQL databases. It sits between your applications and your MySQL servers, providing connection pooling, query routing, basic query inspection, and more.  It's designed to improve database performance, availability, and security.
 
